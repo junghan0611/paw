@@ -56,7 +56,7 @@
   :group 'paw
   :type 'list)
 
-(defcustom paw-annotation-after-string-space "\u2009"
+(defcustom paw-annotation-after-string-space (if (eq system-type 'android) " " "\u2009")
   "Space string for annotation. Currently only support Japanese."
   :group 'paw
   :type '(choice (const :tag "Normal space" " ")
@@ -74,6 +74,7 @@
     (define-key map "p" 'paw-previous-annotation) ;; may impact edit mode
     (define-key map "y" 'paw-copy-annotation)
     (define-key map "r" 'paw-replay)
+    (define-key map "s" 'paw-view-note-in-minibuffer)
     (define-key map "i" 'paw-find-note)
     (define-key map "&" 'paw-find-note)
     (define-key map "I" 'paw-find-notes)
@@ -1169,6 +1170,7 @@ If WHOLE-FILE is t, always index the whole file."
     (define-key map (kbd "C-c C-,") 'paw-add-attachment)
     (define-key map (kbd "C-c C-n") 'paw-next-annotation)
     (define-key map (kbd "C-c C-p") 'paw-previous-annotation)
+    (define-key map (kbd "C-c s") 'paw-view-note-in-minibuffer)
     (define-key map (kbd "C-c v") 'paw-view-note)
     (define-key map (kbd "C-c t") 'paw-view-note-translate)
     (define-key map (kbd "C-c h") 'paw-add-highlight)
@@ -1190,7 +1192,7 @@ If WHOLE-FILE is t, always index the whole file."
 
 (if (fboundp 'evil-define-key)
     (evil-define-key '(normal visual insert) paw-annotation-mode-map
-      (kbd "s") 'paw-view-note
+      (kbd "s") 'paw-view-note-in-minibuffer
       (kbd "t") 'paw-view-note-transalate
       ;; (kbd "i") 'paw-add-highlight
       (kbd "a") 'paw-add-online-word
@@ -1422,6 +1424,8 @@ is t."
      :enable paw-annotation-mode]
     ["List all annotations" paw-list-all-annotations
      :help "List all annotations in the buffer"]
+    ["View Definition" paw-view-note-in-minibuffer
+     :help "View the annotation"]
     ["View note" paw-view-note
      :help "View the annotation"]
     ["View all notes in the buffer" paw-view-notes
@@ -1456,7 +1460,7 @@ is t."
      :help "Add a word to Eudic"]
     ["Add a word (offline)" paw-add-offline-word
      :help "Add a word locally"]
-    ["Add a word (offline)" paw-add-word
+    ["Add a word" paw-add-word
      :help "Add a word annotation locally"]
     ["Add a highlight" paw-add-highlight
      :help "Add a highlight annotation"]

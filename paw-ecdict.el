@@ -44,6 +44,18 @@ english words. Words tat less than it would not be queried."
 (defcustom paw-ecdict-collins-max-level 5
   "The max collins level, if any")
 
+(defcustom paw-ecdict-show-tags-p nil
+  "Whether show tags in the result.")
+
+(defcustom paw-ecdict-show-transaltion-p t
+  "Whether show translation (Chinese) in the result.")
+
+(defcustom paw-ecdict-show-definition-p t
+  "Whether show definition (English) in the result.")
+
+(defcustom paw-ecdict-show-exchange-p t
+  "Whether show exchange in the result.")
+
 (defvar paw-ecdict-running-process nil)
 
 ;;;###autoload
@@ -97,7 +109,7 @@ english words. Words tat less than it would not be queried."
 
       )))
 
-(defun paw-ecdict-command (string &optional sentinel)
+(defun paw-ecdict-command (string &optional sentinel search-type)
   "Segments a STRING of Japanese text using ECDICT and logs the result asynchronously."
   (paw-ecdict-kill-process)
   (let* ((original-output-buffer (get-buffer "*paw-ecdict-output*"))
@@ -112,6 +124,7 @@ english words. Words tat less than it would not be queried."
                           :command `(,paw-python-program
                                      ,paw-ecdict-program
                                      ,paw-ecdict-db
+                                     ,search-type
                                      ,string
                                      ,paw-ecdict-tags
                                      ,(number-to-string paw-ecdict-oxford)
@@ -127,5 +140,36 @@ english words. Words tat less than it would not be queried."
     (with-current-buffer output-buffer
       (setq-local original-string string))
     (process-send-eof paw-ecdict-process)))
+
+(defun paw-ecdict-format-string (phonetic translation definition collins oxford tag bnc frq exchange)
+  (format "%s%s%s%s%s"
+          (if (and (stringp phonetic) (not (string= phonetic "")))
+              (format "[%s]\n\n" phonetic)
+            "")
+          (if paw-ecdict-show-transaltion-p
+              (if (and (stringp translation) (not (string= translation "")))
+                  (format "%s" translation)
+                "")
+            "")
+          (if paw-ecdict-show-definition-p
+              (if (and (stringp definition) (not (string= definition "")))
+                  (format "\n\n%s" definition)
+                "")
+            "")
+          (if paw-ecdict-show-tags-p
+              (if (or collins oxford tag bnc frq)
+                  (format "\n\n%s%s%s%s"
+                          (if collins (format "collins: %s, " collins) "")
+                          (if oxford (format "oxford: %s, " oxford) "")
+                          (if (and (stringp tag) (not (string= tag ""))) (format "%s, " tag) "")
+                          (if (or bnc frq) (format "%s/%s" bnc frq) ""))
+                "")
+            "")
+          (if paw-ecdict-show-exchange-p
+              (if (and (stringp exchange) (not (string= exchange "")))
+                  (format "\n\n%s" exchange)
+                "")
+            ""))
+  )
 
 (provide 'paw-ecdict)

@@ -354,6 +354,10 @@
         (paw t))))
 
 
+(defcustom paw-add-to-known-words-without-asking t
+  "If non-nil, add the word to known words without asking."
+  :group 'paw
+  :type 'boolean)
 
 ;;; TODO
 ;;;###autoload
@@ -368,12 +372,14 @@
                     (list (get-text-property (point) 'paw-entry))
                   ;; any word at point
                   (list (paw-new-entry (word-at-point t) :add-to-known-words t)))))))
-    (when (yes-or-no-p (if (eq (length entries) 1)
-                           (progn
-                             (if (alist-get 'add-to-known-words (car entries))
-                                 (format "Add '%s' to known words? " (alist-get 'word (car entries)))
-                               (format "Delete: %s " (alist-get 'word (car entries)))))
-                         (format "Delete %s entries" (length entries)) ))
+    (when (if (eq (length entries) 1)
+              (progn
+                (if (alist-get 'add-to-known-words (car entries))
+                    (if paw-add-to-known-words-without-asking
+                        t
+                        (format "Add '%s' to known words? " (alist-get 'word (car entries))))
+                  (yes-or-no-p (format "Delete: %s " (alist-get 'word (car entries))) )))
+            (yes-or-no-p (format "Delete %s entries" (length entries)) ) )
       (when entries
         (cl-loop for entry in entries do
                  (let* ((word (alist-get 'word entry))
@@ -393,32 +399,36 @@
                         (origin_id (alist-get 'origin_id entry))
                         (lang (alist-get 'lang entry))
                         (add-to-known-words (alist-get 'add-to-known-words entry))
-                        (file (expand-file-name (concat word ".org") temporary-file-directory))
-                        (deleted nil))
+                        (file (expand-file-name (concat word ".org") temporary-file-directory)))
                    (if add-to-known-words ;; if add-to-known-words is t, we put the word to known file instead of deleting it in db
                        (pcase lang
                          ("en" (if (and paw-ecdict-default-known-words-file (file-exists-p paw-ecdict-default-known-words-file))
-                                 (with-temp-buffer
-                                   (insert-file-contents paw-ecdict-default-known-words-file)
-                                   (goto-char (point-max))
-                                   (insert word "\n")
-                                   (write-region (point-min) (point-max) paw-ecdict-default-known-words-file)
-                                   (message "Added %s to known words." word)
-                                   (setq deleted t))
+                                   (progn
+                                     (with-temp-buffer
+                                       (insert-file-contents paw-ecdict-default-known-words-file)
+                                       (goto-char (point-max))
+                                       (insert word "\n")
+                                       (write-region (point-min) (point-max) paw-ecdict-default-known-words-file)
+                                       (message "Added %s to known words." word))
+                                     ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                     (paw-delete-word-overlay word))
                                  (message "Known words file not exists.")))
                          ("ja" (if (and paw-jlpt-default-known-words-file (file-exists-p paw-jlpt-default-known-words-file))
-                                   (with-temp-buffer
-                                     (insert-file-contents paw-jlpt-default-known-words-file)
-                                     (goto-char (point-max))
-                                     (insert word "\n")
-                                     (write-region (point-min) (point-max) paw-jlpt-default-known-words-file)
-                                     (message "Added %s to known words." word)
-                                     (setq deleted t))
+                                   (progn
+                                     (with-temp-buffer
+                                       (insert-file-contents paw-jlpt-default-known-words-file)
+                                       (goto-char (point-max))
+                                       (insert word "\n")
+                                       (write-region (point-min) (point-max) paw-jlpt-default-known-words-file)
+                                       (message "Added %s to known words." word))
+                                     ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                     (paw-delete-word-overlay word))
                                  (message "Known words file not exists.")))
                          (_ (message "Unsupport language %s during adding known words." lang)))
                        (if (not (paw-online-p serverp))
                            ;; not in the server delete directly
                            (progn
+                             ;; delete word in db
                              (paw-db-delete word)
                              ;; delete image/attachment
                              (if content-path
@@ -432,29 +442,35 @@
                                                       (delete-file attachment)
                                                     (message "Attachment %s not exists." attachment))))
                                    (_ nil)))
-                             (setq deleted t))
+                             ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                             (paw-delete-word-overlay word)
+                             (if (eq major-mode 'paw-search-mode)
+                                 (paw-search-refresh)
+                               (paw-search-refresh t)))
                          ;; it is in the server, must delete server's first
-                         (paw-request-delete-words word origin_id))
+                         (paw-request-delete-words word origin_id
+                                                   (lambda()
+                                                     ;; delete word in db
+                                                     (paw-db-delete word)
+                                                     ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                                     (paw-delete-word-overlay word)
+                                                     (if (eq major-mode 'paw-search-mode)
+                                                         (paw-search-refresh)
+                                                       (paw-search-refresh t))))))))))))
 
-                     )
-
-
-                   ;; delete overlay search on the buffers enable `paw-annotation-mode'
-                   (if deleted
-                       (-map (lambda (b)
-                               (with-current-buffer b
-                                 (if (eq paw-annotation-mode t)
-                                     (let ((overlays-to-delete
-                                            (cl-remove-if-not
-                                             (lambda (o) (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
-                                             (overlays-in (point-min) (point-max)))))
-                                       (dolist (o overlays-to-delete) ; delete all matching overlays
-                                         (delete-overlay o))
-                                       (setq-local paw-db-update-p t))))) ; update the
-                             (buffer-list)) )))
-        (if (eq major-mode 'paw-search-mode)
-            (paw-search-refresh)
-          (paw-search-refresh t))))))
+(defun paw-delete-word-overlay(word)
+  "Delete overlay search on the buffers enable `paw-annotation-mode'"
+  (-map (lambda (b)
+          (with-current-buffer b
+            (if (eq paw-annotation-mode t)
+                (let ((overlays-to-delete
+                       (cl-remove-if-not
+                        (lambda (o) (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
+                        (overlays-in (point-min) (point-max)))))
+                  (dolist (o overlays-to-delete) ; delete all matching overlays
+                    (delete-overlay o))
+                  (setq-local paw-db-update-p t))))) ; update the
+        (buffer-list)))
 
 (defvar paw-copied-entries nil)
 

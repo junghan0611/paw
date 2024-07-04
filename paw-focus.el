@@ -10,7 +10,6 @@
 
 (require 'focus)
 
-
 (defun paw-focus-find-current-thing()
   (interactive)
   (cond ((get-char-property (point) 'paw-entry)
@@ -50,7 +49,7 @@
 (defun paw-focus-find-current-thing-segment(&optional thing)
   (interactive)
   (let* ((thing (or thing
-                    paw-note-word
+                    (paw-note-word)
                     (if mark-active
                         (buffer-substring-no-properties (region-beginning) (region-end))
                       (if focus-mode
@@ -62,7 +61,8 @@
                         (paw-get-sentence-or-line)))))
          (lang_word (paw-remove-spaces-based-on-ascii-rate-return-cons thing))
          (lang (car lang_word))
-         (new-thing (cdr lang_word)))
+         (new-thing (cdr lang_word))
+         (paw-view-note-show-type 'buffer))
     ;; ;; delete the overlay, focus mode does not not need click overlay
     ;; (if paw-click-overlay
     ;;     (delete-overlay paw-click-overlay) )
@@ -75,7 +75,7 @@
            (paw-view-note (paw-new-entry new-thing :lang "en")
                           :no-pushp t ;; for better performance
                           :kagome (lambda(word _buffer) ;; FIXME buffer is not used
-                                    (paw-ecdict-command word 'paw-focus-view-note-process-sentinel-english))))
+                                    (paw-ecdict-command word 'paw-focus-view-note-process-sentinel-english "SENTENCE"))))
           ((string= lang "ja")
            (paw-view-note (paw-new-entry new-thing :lang "ja")
                           :no-pushp t ;; for better performance
@@ -112,7 +112,7 @@ the argument."
                             (when (string-match "\\[\\[.*?\\]\\[.*?\\]\\]" focus-thing)
                               (setq focus-thing (replace-match "" nil nil focus-thing)))
                             focus-thing)
-                        (if (buffer-file-name)
+                        (if (and (buffer-file-name) (not (string= (file-name-extension (buffer-file-name)) "epub")))
                             ;; if a file, send a filename to python to processed
                             ;; directly, so that we can handle very big file
                             buffer-file-name
@@ -133,9 +133,9 @@ the argument."
         (deactivate-mark))
     ;; (format "Analysing %s..." new-thing)
     (cond ((string= lang "en")
-           (paw-ecdict-command new-thing 'paw-focus-find-unknown-words-sentinel-english))
+           (paw-ecdict-command new-thing 'paw-focus-find-unknown-words-sentinel-english "SENTENCE"))
           ((string= lang "ja")
-           (paw-jlpt-command new-thing 'paw-focus-find-unknown-words-sentinel-japanese))
+           (paw-jlpt-command new-thing 'paw-focus-find-unknown-words-sentinel-japanese "SENTENCE"))
           (t (message "Unsupported language %s" lang)))))
 
 (defun paw-focus-find-next-thing-segment()
@@ -304,7 +304,7 @@ the argument."
                               original-string))
            (buffer-content (with-current-buffer (process-buffer proc)
                              (buffer-string)))
-           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list))
+           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list :null-object nil))
            (segmented-text (mapconcat
                             (lambda (resp) (plist-get resp :word))
                             json-responses
@@ -312,17 +312,21 @@ the argument."
            candidates)
       (with-current-buffer (get-buffer paw-view-note-buffer-name)
         (let ((buffer-read-only nil))
+          (goto-char (point-min))
+          (org-entry-put nil "METADATA"
+                         (format "Total %s; tags:%s; oxford:%s; collins:%s; bnc:%s frq:%s"
+                                 (length json-responses)
+                                 paw-ecdict-tags
+                                 (number-to-string paw-ecdict-oxford)
+                                 (number-to-string paw-ecdict-collins-max-level)
+                                 (number-to-string paw-ecdict-bnc)
+                                 (number-to-string paw-ecdict-frq)))
+
           (search-forward "** Meaning" nil t)
           (org-mark-subtree)
           (forward-line)
           (delete-region (region-beginning) (region-end))
-          (insert (format "*** Total %s; tags:%s; oxford:%s; collins:%s; bnc:%s frq:%s;\n"
-                          (length json-responses)
-                          paw-ecdict-tags
-                          (number-to-string paw-ecdict-oxford)
-                          (number-to-string paw-ecdict-collins-max-level)
-                          (number-to-string paw-ecdict-bnc)
-                          (number-to-string paw-ecdict-frq)))
+
           (dolist (resp json-responses candidates)
             (let* ((id (plist-get resp :id))
                    (word (plist-get resp :word))
@@ -341,7 +345,7 @@ the argument."
                    (audio (plist-get resp :audio))
                    (entry (paw-candidate-by-word word))) ; features just a combination of other fields
               (when (not (string= word "nil"))
-                (insert (format "*** [[paw:%s][%s]] [%s] " word word phonetic))
+                (insert (format "*** [[paw:%s][%s]] " word word))
                 (insert (paw-play-button
                          (lambda ()
                            (interactive)
@@ -364,10 +368,12 @@ the argument."
                                                  (funcall paw-external-dictionary-function word))) "\n")
 
                 (paw-insert-and-make-overlay
-                 (format "_collins_: %s, _oxford_: %s, _tag_: %s, _bnc_ %s, _frq_: %s, _exchange_: %s\n%s\n%s\n"
-                                collins oxford tag bnc frq exchange translation definition )
+                 (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange)
                  'face 'org-block)
+                (insert "\n")
                 (if entry (push (car entry) candidates) ))))
+
+
           ;; (paw-show-all-annotations candidates)
           (deactivate-mark)
           (goto-char (point-min))
@@ -389,7 +395,7 @@ the argument."
                               original-string))
            (buffer-content (with-current-buffer (process-buffer proc)
                              (buffer-string)))
-           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list))
+           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list :null-object nil))
            candidates
            order)
       (setq order 1)
@@ -415,8 +421,7 @@ the argument."
           ;; FIXME: this could be done in python as well
           (unless (paw-check-word-exist-p word)
             (push (paw-new-entry word :lang "en"
-                                 :exp (format "_collins_: %s, _oxford_: %s, _tag_: %s, _bnc_ %s, _frq_: %s, _exchange_: %s\n%s\n%s"
-                                              collins oxford tag bnc frq exchange translation definition )
+                                 :exp (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange)
                                  ;; FIXME: use created-at to store the order,
                                  ;; because new words are not in db, can not
                                  ;; compare the time with the words in db

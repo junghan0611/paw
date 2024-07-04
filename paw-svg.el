@@ -395,8 +395,10 @@
 (defun paw-add-button-function (&optional arg)
   (interactive)
   (if paw-add-button-online-p
-      (funcall-interactively 'paw-add-online-word (paw-note-word))
-    (funcall-interactively 'paw-add-offline-word (paw-note-word))))
+      (let ((paw-add-online-word-without-asking t))
+        (funcall-interactively 'paw-add-online-word (paw-note-word)))
+    (let ((paw-add-offline-word-without-asking t))
+      (funcall-interactively 'paw-add-offline-word (paw-note-word)))))
 
 (defun paw-edit-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[pencil]" (or callback 'paw-edit-button-function)))
@@ -411,7 +413,15 @@
 
 (defun paw-edit-button-function(&optional arg)
   (interactive)
-  (funcall 'paw-find-note (car (paw-candidate-by-word (paw-note-word)) )))
+  (pcase (org-no-properties (org-get-heading t t t t))
+    ("Saved Meanings"
+     (funcall 'paw-find-saved-meanings (car (paw-candidate-by-word (paw-note-word)))))
+    ("Meaning"
+     (funcall 'paw-change-studylist (car (paw-candidate-by-word (paw-note-word)))))
+    ("Notes"
+     (funcall 'paw-find-note (car (paw-candidate-by-word (paw-note-word)) )))
+    (_ (message "No note found")))
+  )
 
 (defun paw-delete-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[delete]" (or callback 'paw-delete-button-function)))
@@ -522,7 +532,15 @@
 
 (defun paw-ai-translate-button-function (&optional arg)
   (interactive)
-  (funcall paw-ai-translate-function (paw-get-real-word (paw-note-word))))
+  (let* ((word (paw-get-real-word (paw-note-word)))
+         (word (replace-regexp-in-string "^[ \n]+" "" word))
+         (note paw-note-note))
+    (funcall paw-ai-translate-function word
+             (or paw-gptel-ai-translate-prompt
+                 (format "Translate this word/sentence/phrase into %s: %s. It is used in: %s"
+                         paw-gptel-language
+                         word
+                         note)))))
 
 (defun paw-ask-ai-button ()
   (cond (paw-svg-enable (svg-lib-button "[chat-question] Ask AI" 'paw-ask-ai-button-function))
@@ -537,7 +555,24 @@
 
 (defun paw-ask-ai-button-function (&optional arg)
   (interactive)
-  (funcall paw-ai-translate-function (paw-get-real-word (paw-note-word)) (read-string "Ask AI: ")))
+  (let* ((word (paw-get-real-word (paw-note-word)))
+         (word (replace-regexp-in-string "^[ \n]+" "" word)))
+    (funcall paw-ai-translate-function word
+             (or paw-gptel-ask-ai-prompt
+                 (format "I'm reading%s, I have a question about the following highlighted text: %s, %s"
+                         (if (buffer-live-p paw-note-target-buffer)
+                             (with-current-buffer paw-note-target-buffer
+                               (pcase major-mode
+                                 ('nov-mode
+                                  (format " in this book, author: %s, title: %s, published at %s"
+                                          (alist-get 'creator nov-metadata)
+                                          (alist-get 'title nov-metadata)
+                                          (alist-get 'date nov-metadata)))
+                                 ;; TODO support other modes
+                                 (_ "")))
+                           "")
+                         word
+                         (read-string "Ask AI: ")))) ))
 
 
 

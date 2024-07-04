@@ -438,7 +438,14 @@ serverp:
                    (= serverp 1)
                    (= serverp 4)
                    (= serverp 5)
-                   (= serverp 6))])))) ;; or all the online words but not known words
+                   (= serverp 6)
+
+                   (= serverp 8)
+                   (= serverp 9)
+                   (= serverp 10)
+                   (= serverp 11)
+
+                   )])))) ;; or all the online words but not known words
 
 
 (defun paw-online-p (serverp)
@@ -538,6 +545,8 @@ serverp:
      (plist-get eww-data :url))
     ('eaf-mode
      (abbreviate-file-name eaf--buffer-url))
+    ('paw-view-note
+     (alist-get 'origin-path (paw-note-word)))
     (_
      (if (buffer-file-name)
          (abbreviate-file-name (buffer-file-name))

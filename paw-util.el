@@ -6,6 +6,7 @@
 (require 'paw-goldendict)
 (require 'paw-go-translate)
 (require 'paw-android)
+(require 'paw-dictionary)
 (require 'compile)
 
 (require 'thingatpt)
@@ -171,6 +172,12 @@
           (function-item popweb-url-input)
           function))
 
+(defcustom paw-dictionary-function #'paw-dictionary-search
+  "paw dictionary function, Default dictionary function for querying
+the WORD."
+  :group 'paw
+  :type 'function)
+
 (defcustom paw-search-function #'paw-sdcv-search-with-dictionary-async
   "Default search function for querying the WORD. Its purpose is to
 search the WORD, and replace the content under Meaning section
@@ -284,7 +291,7 @@ Align should be a keyword :left or :right."
   ;; kagome: NOT the database field
   ;; lang: NOT the database field
   `((word . ,word)
-    (exp . ,(or (plist-get properties :exp) ""))
+    (exp . ,(plist-get properties :exp))
     (content . ,word) ;; sam as other annotations which has id, currently it only saves the real content of the word, or json string for internal usage
     (serverp . 3)
     (note . "")

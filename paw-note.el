@@ -33,6 +33,7 @@
 (defvar paw-note-entry nil)
 (defvar paw-note-origin-type nil)
 (defvar paw-note-origin-path nil)
+(defvar paw-note-note nil)
 (defvar paw-note-header-function #'paw-note-header
   "Function that returns the string to be used for the Calibredb edit note header.")
 
@@ -129,8 +130,7 @@
 
                (insert paw-default-play-button " ")
                (if (eq serverp 3)
-                   (insert paw-add-button " ")
-                 (insert paw-edit-button " "))
+                   (insert paw-add-button " "))
                (insert paw-delete-button " ")
                (insert paw-goldendict-button " ")
                (pcase serverp
@@ -247,8 +247,12 @@
 
          (when (or
                 multiple-notes ;; we need the buttons on paw-view-notes
-                (and (stringp exp) (not (string= exp ""))) ) ;; dont show it if empty
+                (and (stringp exp) ) ) ;; dont show it if empty
            (insert "** Saved Meanings ")
+           ;; unknown words could have Saved Meanings but shouldn't be able to edit
+           ;; because the Saved Meanings are from Internal Dictionaries
+           (unless (eq serverp 3)
+               (insert paw-edit-button))
            (insert "\n")
            (paw-insert-and-make-overlay (substring-no-properties (if exp (concat exp "\n") "")) 'face 'org-block)
            )
@@ -260,7 +264,9 @@
                (insert paw-default-play-button " ")
                (if (eq serverp 3)
                    (insert paw-add-button " ")
-                 (insert paw-edit-button " "))
+                 (if (or (paw-online-p serverp)
+                         (paw-offline-p serverp))
+                     (insert paw-edit-button " ")))
                (insert paw-delete-button " ")
                (insert paw-goldendict-button " ")
                (insert paw-next-button " ")
@@ -271,7 +277,9 @@
              (insert paw-default-play-button " ")
              (if (eq serverp 3)
                  (insert paw-add-button " ")
-               (insert paw-edit-button " "))
+               (if (or (paw-online-p serverp)
+                       (paw-offline-p serverp))
+                   (insert paw-edit-button " ")))
              (insert paw-delete-button " ")
              (insert paw-goldendict-button " ")
              (pcase serverp
@@ -303,7 +311,11 @@
 
 
     (unless no-note-header
-      (insert "** Notes\n"))
+      (insert "** Notes ")
+      (unless (eq serverp 3)
+        (insert paw-edit-button))
+      (insert "\n")
+      )
 
     ;; highlight the word part in note
     ;; it has bug during view-notes or find-notes
@@ -397,11 +409,11 @@
             (find-file-other-window file)))
       (with-temp-file file
         (org-mode)
-        (cond ((stringp origin-path) (insert "#+TITLE: " (file-name-nondirectory origin-path) "\n") )
-              ((stringp origin-point) (insert "#+TITLE: studylist - " origin-point "\n"))
-              (t (insert "#+TITLE: NO TITLE\n")))
-        (insert "#+STARTUP: showall\n\n")
-        (paw-insert-note entry :find-note t :export t))
+        ;; (cond ((stringp origin-path) (insert "#+TITLE: " (file-name-nondirectory origin-path) "\n") )
+        ;;       ((stringp origin-point) (insert "#+TITLE: studylist - " origin-point "\n"))
+        ;;       (t (insert "#+TITLE: NO TITLE\n")))
+        ;; (insert "#+STARTUP: showall\n\n")
+        (insert (alist-get 'note entry)))
       (let ((buffer (find-buffer-visiting file)))
         (if buffer
             (let ((window (get-buffer-window buffer)))
@@ -411,7 +423,8 @@
                 (find-file file)))
           (find-file-other-window file))))
     (paw-note-mode)
-    (add-hook 'after-save-hook 'paw-send-edited-note nil t)
+    (setq header-line-format '(:eval (funcall paw-note-header-function)))
+    ;; (add-hook 'after-save-hook 'paw-send-edited-note nil t)
     (setq-local paw-note-word word)
     (setq-local paw-note-target-buffer target-buffer)
     (setq-local paw-note-origin-type major-mode)
@@ -419,7 +432,7 @@
     (setq-local paw-note-note note)
     (goto-char (point-min))
     ;; jump to * Notes and narrow
-    (search-forward-regexp "** Saved Meanings\n")
+    ;; (search-forward-regexp "** Saved Meanings\n")
     ;; (unless no-widen
     ;;   (org-narrow-to-subtree))
     ))
@@ -428,6 +441,49 @@
   "Whether to view note after editting the note."
   :group 'paw
   :type 'boolean)
+
+(defun paw-find-saved-meanings (&optional entry)
+  "Use minibuffer contents as Saved Meanings."
+  (interactive)
+  (let* ((entry (or entry
+                         (get-char-property (point) 'paw-entry)
+                         paw-note-entry
+                         (car (paw-candidate-by-word (paw-note-word)))))
+              (word (alist-get 'word entry))
+              (exp (alist-get 'exp entry))
+              (origin-path (alist-get 'origin_path entry))
+              (origin-point (alist-get 'origin_point entry))
+              (target-buffer (if paw-note-target-buffer
+                                 paw-note-target-buffer
+                               (current-buffer)))
+              (new-exp (read-string (format "Saved Meanings (%s): " word) exp)))
+    (paw-update-exp paw-note-word new-exp)
+
+    ;; update the overlays on target-buffer
+    (when (buffer-live-p target-buffer)
+      (with-current-buffer target-buffer
+        (unless (eq major-mode 'paw-search-mode)
+          (when-let ((overlay (cl-find-if
+                               (lambda (o)
+                                 (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
+                               (overlays-in (point-min) (point-max))))
+                     (paw-entry (overlay-get overlay 'paw-entry)))
+            (setf (cdr (assoc 'exp paw-entry)) new-exp)
+            (overlay-put overlay 'help-echo new-exp)))))
+
+    ;; query back the entry
+    (setq paw-note-entry (car (paw-candidate-by-word word) ))
+
+    ;; show the word again
+    (paw-view-note-refresh)
+
+    ;; update buffer, so that we do not need to run paw to make the dashboard refresh
+    (if (buffer-live-p (get-buffer "*paw*"))
+        (paw t))
+
+    (message "Saved Meanings saved."))
+
+  )
 
 ;;;###autoload
 (defun paw-send-edited-note ()
@@ -439,42 +495,32 @@ Bound to \\<C-cC-c> in `paw-note-mode'."
     (error "Not in mode derived from `paw-note-mode'"))
   (save-buffer)
   (let* ((buffer (current-buffer))
-         (exp (save-excursion
-                 (with-current-buffer buffer
-                   (goto-char (point-min))
-                   (re-search-forward "#** Saved Meanings")
-                   (substring-no-properties (org-get-entry)))))
-         (note (save-excursion
-                 (with-current-buffer buffer
-                   (goto-char (point-min))
-                   (re-search-forward "#** Notes")
-                   (substring-no-properties (org-get-entry))))))
+         (note (with-current-buffer buffer
+                 (buffer-string))))
     (with-current-buffer buffer
       (let* ((word paw-note-word)
              (target-buffer paw-note-target-buffer))
         (when word
-          (paw-update-exp paw-note-word exp)
           (paw-update-note paw-note-word note))
 
         ;; update the overlays on target-buffer
         (when (buffer-live-p target-buffer)
           (with-current-buffer target-buffer
-            (setf (cdr (assoc 'exp (overlay-get (cl-find-if
-                                                 (lambda (o)
-                                                   (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
-                                                 (overlays-in (point-min) (point-max))) 'paw-entry) ) ) exp)
-            (setf (cdr (assoc 'note (overlay-get (cl-find-if
-                                                  (lambda (o)
-                                                    (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
-                                                  (overlays-in (point-min) (point-max))) 'paw-entry) ) ) note)))
+            (unless (eq major-mode 'paw-search-mode)
+              (setf (cdr (assoc 'note (overlay-get (cl-find-if
+                                                    (lambda (o)
+                                                      (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
+                                                    (overlays-in (point-min) (point-max))) 'paw-entry) ) ) note) )))
 
         ;; query back the entry
         (setq paw-note-entry (car (paw-candidate-by-word word) ))))
 
     ;; show the word again
     (if paw-view-note-after-editting-note
-        (paw-view-note paw-note-entry :no-pushp t))
-
+        (paw-view-note paw-note-entry :no-pushp t)
+      (when-let ((window (get-buffer-window paw-view-note-buffer-name)))
+        (with-selected-window (select-window window)
+          (paw-view-note-refresh))))
     ;; update buffer, so that we do not need to run paw to make the dashboard refresh
     (if (buffer-live-p (get-buffer "*paw*"))
         (paw t))
@@ -526,6 +572,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
     ;; (define-key map "q" #'paw-view-note-quit)
     (define-key map "a" #'paw-add-online-word)
     (define-key map "A" #'paw-add-offline-word)
+    (define-key map "d" #'paw-delete-button-function)
     map)
   "Keymap for `paw-view-note-mode'.")
 
@@ -542,6 +589,8 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
       ;; (kbd "q") 'paw-view-note-quit
       (kbd "a") 'paw-add-online-word
       (kbd "A") 'paw-add-offline-word
+      (kbd "d") 'paw-delete-button-function
+      (kbd "D") 'paw-delete-button-function
       ) )
 
 
@@ -630,6 +679,13 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
     )
   )
 
+(defcustom paw-view-note-show-type 'buffer
+  "The method of the view note."
+  :group 'paw
+  :type '(choice (const :tag "minibuffer" minibuffer)
+                (const :tag "buffer" buffer)
+                (const :tag "all" all)))
+
 ;;;###autoload
 (defun paw-view-note (&optional entry &rest properties)
   "View note on anything!
@@ -647,6 +703,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
                      ;; (error "Please select a word or sentence.")
                      (error "") ;; compress the error
                    real-word)))
+         (exp (alist-get 'exp entry))
          ;; (content (alist-get 'content entry))
          ;; (content-json (condition-case nil
          ;;                   (let ((output (json-read-from-string content)))
@@ -687,6 +744,11 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
          (buffer (if (buffer-live-p buffer)
                      buffer
                    (get-buffer-create paw-view-note-buffer-name))))
+
+    ;; deactivate mark before showing *paw-view-note*
+    (if mark-active
+        (deactivate-mark))
+
     (when (not no-pushp)
       (setq paw-current-entry entry)
       (if (> (length paw-entries-history) paw-entries-history-max)
@@ -704,108 +766,124 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
        (if paw-say-word-p
            (funcall paw-default-say-word-function (paw-remove-spaces word lang) lang))))
 
+    (when (or (eq paw-view-note-show-type 'minibuffer)
+            (eq paw-view-note-show-type 'all))
+      ;; show exp in minibuffer if exist,
+      ;; but this is redundant, since user can still view it on help-echo
+      ;; (if (and (stringp exp) (not (string= exp "")))
+      ;;     (message (paw-remove-spaces exp lang))
+      ;;   (funcall paw-dictionary-function word))
 
-    (with-current-buffer buffer
-      (let ((inhibit-read-only t))
-        (org-mode)
-        (goto-char (point-min))
-        (erase-buffer)
-        ;; (unless (search-forward "#+TITLE" nil t)
-        ;;   (cond ((stringp origin-point) (insert "#+TITLE: studylist - " origin-point "\n"))
-        ;;         ((stringp origin-path) (insert "#+TITLE: " (file-name-nondirectory origin-path) "\n") )
-        ;;         (t (insert "#+TITLE: NO TITLE\n")))
-        ;;   ;; (insert "#+STARTUP: showall\n")
-        ;;   )
-        ;; (goto-char (point-max))
-        (paw-view-note-mode)
-        ;; must set local variables before insert note, so that paw-insert-note can access those values
-        (setq-local paw-note-target-buffer target-buffer)
-        (setq-local paw-note-word origin-word)
-        (setq-local paw-note-note note)
-        (setq-local paw-note-entry entry)
-        (setq-local paw-note-origin-type (or origin-type major-mode))
-        (setq-local paw-note-origin-path (or origin-path (paw-get-origin-path)))
-
-        ;; svg-lib
-        (pcase (car note-type)
-          ((or 'image 'attachment) nil)
-          (_
-           (if (featurep 'svg-lib) (svg-lib-button-mode 1))))
-
-        (paw-insert-note entry :kagome kagome)
-
-        (goto-char (point-min))
-
-
-        (if (string-equal system-type "android") (face-remap-add-relative 'default :height 0.85) )
-        (face-remap-add-relative 'org-document-title :height 0.5)
-        (face-remap-add-relative 'org-document-info-keyword :height 0.5)
-        (face-remap-add-relative 'org-meta-line :height 0.5)
-        (face-remap-add-relative 'org-drawer :height 0.5)
-        ;; (face-remap-add-relative 'org-block :family "Bookerly" :height 0.8)
-        ;; (when (eq (car note-type) 'attachment)
-        ;;   (search-forward-regexp "* Notes\n")
-        ;;   (org-narrow-to-subtree))
-        (setq-local header-line-format '(:eval (funcall paw-view-note-header-function)))
-
-        ;; find the origin-word in database, if it exist, add overlays inside `paw-view-note-buffer-name' buffer
-        (pcase (car note-type)
-          ('word (if (paw-online-p serverp) ;; only online words
-                     (let ((entry (paw-candidate-by-word origin-word)))
-                       (when entry
-                         (paw-show-all-annotations entry))) ))))
-
-      ;; Android TBC: The translate process seems need to run inside of the buffer, otherwise, it will cause error
-      ;; async translate the word
-      (pcase (car note-type)
-        ((or 'image 'attachment) nil)
-        (_
-         (if kagome
-             (funcall kagome word buffer)
-           (funcall paw-search-function word buffer))
-
-         (if paw-transalte-p
-             (funcall paw-translate-function word lang buffer))))
-
+      (funcall paw-dictionary-function word)
       )
 
-    ;; pop to paw-view-note find the correct position
-    (if (not paw-posframe-p)
-        (pop-to-buffer buffer)
-      (unless (eq major-mode 'paw-view-note-mode)
-        (posframe-show buffer
-                       :poshandler 'posframe-poshandler-point-window-center
-                       :width (min 100 (round (* 0.95 (window-width))) )
-                       :height (min 100 (round (* 0.5 (window-height))) )
-                       :respect-header-line t
-                       :cursor 'box
-                       :internal-border-width 2
-                       :accept-focus t
-                       ;; :refposhandler nil
-                       :hidehandler (lambda(_)
-                                      (or (eq last-command 'keyboard-quit)
-                                          (eq this-command 'keyboard-quit)))
-                       :internal-border-color (if (eq (frame-parameter nil 'background-mode) 'light)
-                                                  "#888888"
-                                                "#F4F4F4")))
-      (select-frame-set-input-focus (posframe--find-existing-posframe buffer)))
+    (when (or (eq paw-view-note-show-type 'buffer)
+            (eq paw-view-note-show-type 'all))
+        (with-current-buffer buffer
+          (let ((inhibit-read-only t))
+            (org-mode)
+            (goto-char (point-min))
+            (erase-buffer)
+            ;; (unless (search-forward "#+TITLE" nil t)
+            ;;   (cond ((stringp origin-point) (insert "#+TITLE: studylist - " origin-point "\n"))
+            ;;         ((stringp origin-path) (insert "#+TITLE: " (file-name-nondirectory origin-path) "\n") )
+            ;;         (t (insert "#+TITLE: NO TITLE\n")))
+            ;;   ;; (insert "#+STARTUP: showall\n")
+            ;;   )
+            ;; (goto-char (point-max))
+            (paw-view-note-mode)
+            ;; must set local variables before insert note, so that paw-insert-note can access those values
+            (setq-local paw-note-target-buffer target-buffer)
+            (setq-local paw-note-word origin-word)
+            (setq-local paw-note-note note)
+            (setq-local paw-note-entry entry)
+            (setq-local paw-note-origin-type (or origin-type major-mode))
+            (setq-local paw-note-origin-path (or origin-path (paw-get-origin-path)))
 
-    ;; (display-buffer-other-frame buffer)
-    (unless (search-forward "** Dictionaries" nil t)
-      (search-forward "** Translation" nil t))
-    (beginning-of-line)
-    (recenter 0)
+            ;; svg-lib
+            (pcase (car note-type)
+              ((or 'image 'attachment) nil)
+              (_
+               (if (featurep 'svg-lib) (svg-lib-button-mode 1))))
+
+            (paw-insert-note entry :kagome kagome)
+
+            (goto-char (point-min))
 
 
-    ;; (paw-annotation-mode 1)
-    ;; (sleep-for 0.0001) ;; small delay to avoid error
-    ;; (select-window (previous-window))
+            (if (string-equal system-type "android") (face-remap-add-relative 'default :height 0.85) )
+            (face-remap-add-relative 'org-document-title :height 0.5)
+            (face-remap-add-relative 'org-document-info-keyword :height 0.5)
+            (face-remap-add-relative 'org-meta-line :height 0.5)
+            (face-remap-add-relative 'org-drawer :height 0.5)
+            ;; (face-remap-add-relative 'org-block :family "Bookerly" :height 0.8)
+            ;; (when (eq (car note-type) 'attachment)
+            ;;   (search-forward-regexp "* Notes\n")
+            ;;   (org-narrow-to-subtree))
+            (setq-local header-line-format '(:eval (funcall paw-view-note-header-function)))
 
-    ;; (if (string-equal system-type "android")
-    ;;     (message (s-truncate 30 word))
-    ;;   (message "%s" word))
+            ;; find the origin-word in database, if it exist, add overlays inside `paw-view-note-buffer-name' buffer
+            (pcase (car note-type)
+              ('word (if (paw-online-p serverp) ;; only online words
+                         (let ((entry (paw-candidate-by-word origin-word)))
+                           (when entry
+                             (paw-show-all-annotations entry))) ))))
 
-    (run-hooks 'paw-view-note-after-render-hook)
+          ;; Android TBC: The translate process seems need to run inside of the buffer, otherwise, it will cause error
+          ;; async translate the word
+          (pcase (car note-type)
+            ((or 'image 'attachment) nil)
+            (_
+             (if kagome
+                 (funcall kagome word buffer)
+               (funcall paw-search-function word buffer))
+
+             (if paw-transalte-p
+                 (funcall paw-translate-function word lang buffer))))
+
+          )
+      ;; pop to paw-view-note find the correct position
+      (if (not paw-posframe-p)
+          (pop-to-buffer buffer)
+        (unless (eq major-mode 'paw-view-note-mode)
+          (posframe-show buffer
+                         :poshandler 'posframe-poshandler-point-window-center
+                         :width (min 100 (round (* 0.95 (window-width))) )
+                         :height (min 100 (round (* 0.5 (window-height))) )
+                         :respect-header-line t
+                         :cursor 'box
+                         :internal-border-width 2
+                         :accept-focus t
+                         ;; :refposhandler nil
+                         :hidehandler (lambda(_)
+                                        (or (eq last-command 'keyboard-quit)
+                                            (eq this-command 'keyboard-quit)))
+                         :internal-border-color (if (eq (frame-parameter nil 'background-mode) 'light)
+                                                    "#888888"
+                                                  "#F4F4F4")))
+        (select-frame-set-input-focus (posframe--find-existing-posframe buffer)))
+
+      ;; (display-buffer-other-frame buffer)
+      (unless (search-forward "** Dictionaries" nil t)
+        (search-forward "** Translation" nil t))
+      (beginning-of-line)
+      (recenter 0)
+
+
+      (run-hooks 'paw-view-note-after-render-hook)
+      ;; (paw-annotation-mode 1)
+      ;; (sleep-for 0.0001) ;; small delay to avoid error
+      ;; (select-window (previous-window))
+
+      ;; (if (string-equal system-type "android")
+      ;;     (message (s-truncate 30 word))
+      ;;   (message "%s" word))
+      )
+
+
+
+
+
 
     )
   ;; back to *paw*
@@ -813,6 +891,17 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
   ;;   (if (window-live-p window)
   ;;       (select-window window)))
   )
+
+;;;###autoload
+(defun paw-view-note-in-minibuffer (&optional entry &rest properties)
+  (interactive)
+  (let ((paw-view-note-show-type 'minibuffer))
+    (apply #'paw-view-note entry properties)))
+
+(defun paw-view-note-in-buffer (&optional entry &rest properties)
+  (interactive)
+  (let ((paw-view-note-show-type 'buffer))
+    (apply #'paw-view-note entry properties)))
 
 (defun paw-view-note-refresh()
   "Query the word in database and view note again."
