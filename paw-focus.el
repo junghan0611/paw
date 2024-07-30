@@ -75,7 +75,7 @@
            (paw-view-note (paw-new-entry new-thing :lang "en")
                           :no-pushp t ;; for better performance
                           :kagome (lambda(word _buffer) ;; FIXME buffer is not used
-                                    (paw-ecdict-command word 'paw-focus-view-note-process-sentinel-english "SENTENCE"))))
+                                    (paw-ecdict-db-command word 'paw-focus-view-note-process-sentinel-english "SENTENCE"))))
           ((string= lang "ja")
            (paw-view-note (paw-new-entry new-thing :lang "ja")
                           :no-pushp t ;; for better performance
@@ -86,23 +86,28 @@
 
 (defcustom paw-focus-buffer-max-size 40000
   "The maximum size of the buffer to be processed by
-`paw-focus-find-unknown-words'. If the buffer size is larger than
+`paw-focus-find-words'. If the buffer size is larger than
 this value, the buffer will be saved to a temporary file and
-processed by `paw-focus-find-unknown-words' with the file name as
+processed by `paw-focus-find-words' with the file name as
 the argument."
   :type 'integer
   :group 'paw)
 
 (defcustom paw-focus-buffer-file-name "paw-focus-buffer-file"
   "The file name to save the buffer to be processed by
-`paw-focus-find-unknown-words'."
+`paw-focus-find-words'."
   :type 'string
   :group 'paw)
 
-(defun paw-focus-find-unknown-words(&optional thing)
+
+(define-obsolete-variable-alias 'paw-focus-find-unknown-words
+  'paw-focus-find-words "paw 1.1.0")
+
+(defun paw-focus-find-words(&rest args)
   (interactive)
-  (let* ((buffer (current-buffer))
-         (thing (or thing
+  (let* ((wordlist (plist-get args :wordlist))
+         (buffer (current-buffer))
+         (thing (or (plist-get args :thing)
                     paw-note-word
                     (if mark-active
                         (buffer-substring-no-properties (region-beginning) (region-end))
@@ -132,10 +137,15 @@ the argument."
     (if mark-active
         (deactivate-mark))
     ;; (format "Analysing %s..." new-thing)
-    (cond ((string= lang "en")
-           (paw-ecdict-command new-thing 'paw-focus-find-unknown-words-sentinel-english "SENTENCE"))
+    (cond (wordlist
+           (pcase lang
+             ("en" (paw-ecdict-csv-command new-thing 'paw-focus-find-wordlist-words-sentinel-english "MATCH"))
+             ("ja" (paw-jlpt-csv-command new-thing 'paw-focus-find-wordlist-words-sentinel-japanese "MATCH"))
+             (_ (message "Unsupported language %s" lang))))
+          ((string= lang "en")
+           (paw-ecdict-db-command new-thing 'paw-focus-find-unknown-words-sentinel-english "SENTENCE"))
           ((string= lang "ja")
-           (paw-jlpt-command new-thing 'paw-focus-find-unknown-words-sentinel-japanese "SENTENCE"))
+           (paw-jlpt-db-command new-thing 'paw-focus-find-unknown-words-sentinel-japanese "SENTENCE"))
           (t (message "Unsupported language %s" lang)))))
 
 (defun paw-focus-find-next-thing-segment()
@@ -237,7 +247,15 @@ the argument."
                 (insert (paw-play-button
                          (lambda ()
                            (interactive)
-                           (funcall paw-default-say-word-function surface "ja"))) " ")
+                           (funcall paw-default-say-word-function surface
+                                    :lang "ja"))) " ")
+                (insert (paw-play-source-button
+                        (lambda ()
+                          (interactive)
+                          (funcall paw-default-say-word-function surface
+                                   :lang "ja"
+                                   :source t))) " ")
+
                 (if entry
                     (progn
                       (insert (paw-edit-button
@@ -286,7 +304,7 @@ the argument."
   (interactive)
   (if (get-char-property (point) 'paw-entry)
       (paw-view-note)
-    (paw-ecdict-command
+    (paw-ecdict-db-command
      (if mark-active
          (paw-remove-spaces-based-on-ascii-rate (buffer-substring-no-properties (region-beginning) (region-end)) )
        (if focus-mode
@@ -349,7 +367,14 @@ the argument."
                 (insert (paw-play-button
                          (lambda ()
                            (interactive)
-                           (funcall paw-default-say-word-function word "en"))) " ")
+                           (funcall paw-default-say-word-function word
+                                    :lang "en"))) " ")
+                (insert (paw-play-source-button
+                        (lambda ()
+                          (interactive)
+                          (funcall paw-default-say-word-function word
+                                   :lang "en"
+                                   :source t))) " ")
                 (if entry
                     (progn
                       (insert (paw-edit-button (lambda ()
@@ -368,7 +393,7 @@ the argument."
                                                  (funcall paw-external-dictionary-function word))) "\n")
 
                 (paw-insert-and-make-overlay
-                 (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange)
+                 (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange "\n")
                  'face 'org-block)
                 (insert "\n")
                 (if entry (push (car entry) candidates) ))))
@@ -421,7 +446,7 @@ the argument."
           ;; FIXME: this could be done in python as well
           (unless (paw-check-word-exist-p word)
             (push (paw-new-entry word :lang "en"
-                                 :exp (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange)
+                                 :exp (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange "\n")
                                  ;; FIXME: use created-at to store the order,
                                  ;; because new words are not in db, can not
                                  ;; compare the time with the words in db
@@ -432,6 +457,36 @@ the argument."
         (paw-show-all-annotations candidates))
 
       )))
+
+
+(defun paw-focus-find-wordlist-words-sentinel-english (proc _event)
+  "Handles the english process termination event."
+  (when (eq (process-status proc) 'exit)
+    (let* ((json-object-type 'plist)
+           (json-array-type 'list)
+           (original-string (with-current-buffer (process-buffer proc)
+                              original-string))
+           (buffer-content (with-current-buffer (process-buffer proc)
+                             (buffer-string)))
+           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list :null-object nil))
+           candidates
+           order)
+      (setq order 1)
+      (dolist (resp json-responses candidates)
+        (setq order (+ order 1))
+        (let* ((word (plist-get resp :word))
+               (definition (plist-get resp :definition)))
+          ;; skip the similar word in db
+          ;; FIXME: this could be done in python as well
+          (unless (paw-check-word-exist-p word)
+            (if word
+                (push (paw-new-entry word :lang "en"
+                                     :exp (replace-regexp-in-string "\\\\n" "\n" definition)
+                                     :created-at (format-time-string "%Y-%m-%d %H:%M:%S" (time-add (current-time) (seconds-to-time order)))
+                                     :add-to-known-words t ;; so that it could be added into default known file
+                                     ) candidates) ) )))
+      (with-current-buffer (current-buffer)
+        (paw-show-all-annotations candidates)))))
 
 (defun paw-focus-find-unknown-words-sentinel-japanese (proc _event)
   "Handles the japanese process termination event."
@@ -509,19 +564,46 @@ the argument."
                                    ;; compare the time with the words in db
                                    :created-at (format-time-string "%Y-%m-%d %H:%M:%S" (time-add (current-time) (seconds-to-time order)))
                                    :add-to-known-words t ;; so that it could be added into default known file
-                                   ) candidates)
-
-              )
-             ))
-
-
-
-        )
-
+                                   ) candidates)))))
       ;; (pp candidates)
       (with-current-buffer (current-buffer)
-        (paw-show-all-annotations candidates))
+        (paw-show-all-annotations candidates)))))
 
-      )))
+
+(defun paw-focus-find-wordlist-words-sentinel-japanese (proc _event)
+  "Handles the english process termination event."
+  (when (eq (process-status proc) 'exit)
+    (let* ((json-object-type 'plist)
+           (json-array-type 'list)
+           (original-string (with-current-buffer (process-buffer proc)
+                              original-string))
+           (buffer-content (with-current-buffer (process-buffer proc)
+                             (buffer-string)))
+           (json-responses (json-parse-string buffer-content :object-type 'plist :array-type 'list :null-object nil))
+           candidates
+           order)
+      (setq order 1)
+      (dolist (resp json-responses candidates)
+        (setq order (+ order 1))
+        (let* ((word (plist-get resp :kanji))
+               (waller_definition (plist-get resp :waller_definition)))
+          ;; skip the similar word in db
+          ;; FIXME: this could be done in python as well
+          (unless (paw-check-word-exist-p word)
+            (if (string= (alist-get 'word (car candidates)) word)
+                (progn
+                  ;; (message "Found multiple meanings %s" word)
+                  (setf (alist-get 'exp (car candidates))
+                        (format "%s" (alist-get 'exp (car candidates)) waller_definition)) )
+              (push (paw-new-entry word :lang "ja"
+                                   :exp (format "%s" waller_definition)
+                                   ;; FIXME: use created-at to store the order,
+                                   ;; because new words are not in db, can not
+                                   ;; compare the time with the words in db
+                                   :created-at (format-time-string "%Y-%m-%d %H:%M:%S" (time-add (current-time) (seconds-to-time order)))
+                                   :add-to-known-words t ;; so that it could be added into default known file
+                                   ) candidates)))))
+      (with-current-buffer (current-buffer)
+        (paw-show-all-annotations candidates)))))
 
 (provide 'paw-focus)

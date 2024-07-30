@@ -6,8 +6,8 @@
 ;; URL: https://github.com/chenyanming/paw
 ;; Keywords: tools
 ;; Created: 31 May 2021
-;; Version: 1.0.0
-;; Package-Requires: ((emacs "25.1") (request "0.3.3") (emacsql "3.0.0") (s "1.12.0") (dash "2.17.0") (go-translate "3.0.5") (gptel "0.8.6") (focus "1.0.1") (svg-lib "0.3"))
+;; Version: 1.1.0
+;; Package-Requires: ((emacs "25.1") (request "0.3.3") (emacsql "3.0.0") (s "1.12.0") (dash "2.17.0") (go-translate "3.0.5") (gptel "0.8.6") (focus "1.0.1") (svg-lib "0.3") (anki-editor "0.3.3") (esxml "0.3.7"))
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -60,32 +60,39 @@
         buffer-read-only t
         header-line-format '(:eval (funcall paw-header-function)))
   (buffer-disable-undo)
+  (require 'hl-line)
+  (set (make-local-variable 'hl-line-face) 'paw-search-highlight-face)
+  (hl-line-mode)
   (add-function :before-until (local 'eldoc-documentation-function) #'paw-get-eldoc-word)
   (add-hook 'minibuffer-setup-hook 'paw-search-minibuffer-setup))
 
 (defvar paw-header-function #'paw-header)
 
+(defvar paw-search-entries-length 0)
+
 (defun paw-header ()
   "Header function for *paw* buffer."
-  (format "%s"
-          (format "Annotations: %s  Total: %s  Keyword: %s "
+  (format "%s%s"
+          (format "Annotations: %s  Total: %s  Page: %s/%s  "
                   (propertize paw-db-file 'face 'font-lock-keyword-face)
-                  (propertize (number-to-string (length paw-search-entries)) 'face 'font-lock-type-face)
-                  (propertize paw-search-filter 'face 'font-lock-builtin-face))
-          (format "%s%s"
-                  (if paw-group-filteringp
-                      "Group: "
-                    "")
+                  (propertize (number-to-string paw-search-entries-length) 'face 'font-lock-type-face)
+                  (propertize (number-to-string paw-search-current-page) 'face 'font-lock-type-face)
+                  (propertize (number-to-string paw-search-pages) 'face 'font-lock-type-face))
+          (format "%s"
                   (if (equal paw-search-filter "")
                       ""
-                    (concat paw-search-filter "   ")))))
+                    (concat
+                     (if paw-group-filteringp
+                         "Group: "
+                       "Keyword: ")
+                     (propertize paw-search-filter 'face 'font-lock-builtin-face) )))))
 
 (defvar paw-search-mode-map
   (let ((map (make-sparse-keymap)))
     ;; (define-key map [mouse-1] #'paw-mouse-1)
     (define-key map "/" #'paw-search-live-filter)
-    (define-key map "r" #'paw-search-refresh)
-    (define-key map "R" #'paw-search-clear-filter)
+    (define-key map "R" #'paw-search-update-buffer-and-resume)
+    (define-key map "r" #'paw-search-clear-filter)
     (define-key map "s" #'paw-view-note-query)
     (define-key map "S" #'paw-search-input)
     (define-key map "v" #'paw-view-note)
@@ -94,19 +101,25 @@
     (define-key map "a" #'paw-add-word)
     (define-key map "c" #'paw-change-content)
     (define-key map "C" #'paw-change-note_type)
-    (define-key map "d" #'paw-delete-word)
-    (define-key map "u" #'paw-update-word)
-    (define-key map "U" #'paw-sync-words)
-    (define-key map "n" #'paw-next-word)
+    (define-key map "dd" #'paw-delete-word)
+    (define-key map "dn" #'paw-anki-editor-delete-note)
+    (define-key map "dN" #'paw-anki-editor-delete-notes)
+    (define-key map "dp" #'paw-delete-words-by-origin_path)
+    (define-key map "D" #'paw-delete-word)
+    (define-key map "u" #'paw-anki-editor-push-note)
+    (define-key map "U" #'paw-anki-editor-push-notes)
+    (define-key map "n" #'paw-search-next-page)
+    (define-key map "N" #'paw-next-word)
     (define-key map "y" #'paw-copy-annotation)
-    (define-key map "p" #'paw-previous-word)
-    (define-key map "N" #'paw-next-annotation)
-    (define-key map "P" #'paw-previous-annotation)
+    (define-key map "p" #'paw-search-previous-page)
+    (define-key map "P" #'paw-previous-word)
     (define-key map "i" #'paw-find-note)
     (define-key map "I" #'paw-find-notes)
     (define-key map "'" #'paw-list-groups)
     (define-key map "q" #'paw-quit)
     (define-key map "m" #'paw-mark-and-forward)
+    (define-key map "e" #'paw-anki-gui-edit-note)
+    (define-key map "o" #'paw-anki-gui-browse)
     (define-key map (kbd "<DEL>") #'paw-unmark-and-backward)
     map)
   "Keymap for `paw-search-mode'.")
@@ -115,7 +128,7 @@
     (evil-define-key '(normal emacs) paw-search-mode-map
       ;; (kbd "<mouse-1>") 'paw-mouse-1
       (kbd "/") 'paw-search-live-filter
-      (kbd "g R") 'paw-search-refresh
+      (kbd "g R") 'paw-search-update-buffer-and-resume
       (kbd "g r") 'paw-search-clear-filter
       (kbd "s") 'paw-view-note-query
       (kbd "S") 'paw-search-input
@@ -123,48 +136,31 @@
       (kbd "V") 'paw-view-notes
       (kbd "<RET>") 'paw-find-origin
       (kbd "a") 'paw-add-word
+      (kbd "e") 'paw-anki-gui-edit-note
       (kbd "c c") 'paw-change-content
       (kbd "c n") 'paw-change-note_type
       (kbd "c p") 'paw-change-origin_path
       (kbd "D") 'paw-delete-word
+      (kbd "d n") 'paw-anki-editor-delete-note
+      (kbd "d N") 'paw-anki-editor-delete-notes
       (kbd "d d") 'paw-delete-word
       (kbd "d p") 'paw-delete-words-by-origin_path
-      (kbd "u") 'paw-update-word
-      (kbd "U") 'paw-sync-words
-      (kbd "n") 'paw-next-word
+      (kbd "u") 'paw-anki-editor-push-note
+      (kbd "U") 'paw-anki-editor-push-notes
       (kbd "y y") 'paw-org-link-copy
       (kbd "y a") 'paw-copy-annotation
       (kbd "y w") 'paw-copy-word
-      (kbd "p") 'paw-paste-word
-      ;; (kbd "p") 'paw-previous-word
-      (kbd "r") 'paw-replay
-      (kbd "N") 'paw-next-annotation
-      (kbd "P") 'paw-previous-annotation
+      (kbd "p") 'paw-search-previous-page
+      (kbd "r") 'paw-view-note-play
+      (kbd "R") 'paw-view-note-replay
+      (kbd "n") 'paw-search-next-page
       (kbd "i") 'paw-find-note
       (kbd "I") 'paw-find-notes
       (kbd "'") 'paw-list-groups
       (kbd "q") 'paw-quit
       (kbd "m") 'paw-mark-and-forward
-      (kbd "o") 'paw-view-notes-outline
+      (kbd "o") 'paw-anki-gui-browse
       (kbd "<DEL>") 'paw-unmark-and-backward) )
-
-(defvar paw-print-entry-function #'paw-print-entry--default
-  "Function to print entries into the *paw-search* buffer.")
-
-(defcustom paw-word-min-width 10
-  "Minimum column width for titles in the paw-search buffer."
-  :group 'paw
-  :type 'integer)
-
-(defcustom paw-word-max-width 25
-  "Maximum column width for titles in the paw-search buffer."
-  :group 'paw
-  :type 'integer)
-
-(defcustom paw-trailing-width 30
-  "Space reserved for displaying the feed and tag information."
-  :group 'paw
-  :type 'integer)
 
 ;;;###autoload
 (defun paw (&optional silent path)
@@ -173,20 +169,8 @@
   (let ((beg (point))
         (pos (window-start)))
     (with-current-buffer (paw-buffer)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (let ((cands (if paw-search-entries
-                         paw-search-entries
-                       (progn
-                         (setq paw-search-entries (nreverse (paw-db-select)))
-                         (setq paw-full-entries paw-search-entries)) ))
-              (id 0))
-          (unless (equal cands '(""))   ; not empty list
-            (cl-loop for entry in cands do
-                     (progn
-                       (setq id (1+ id))
-                       (funcall paw-print-entry-function entry id)))))
-        (paw-search-mode)))
+      (paw-search-update-buffer)
+      (paw-search-mode))
     (if (eq major-mode 'paw-search-mode)
         (progn
           (set-window-start (selected-window) pos)
@@ -349,7 +333,6 @@
                                 (abbreviate-file-name file)
                               (user-error "No this file, please input another path")))))
     (paw-db-update-all-origin_path origin-path new-origin-path)
-    (paw-entry-update-all-origin_path origin-path new-origin-path)
     (if (buffer-live-p (get-buffer "*paw*"))
         (paw t))))
 
@@ -444,32 +427,45 @@
                                    (_ nil)))
                              ;; delete overlay search on the buffers enable `paw-annotation-mode'
                              (paw-delete-word-overlay word)
-                             (if (eq major-mode 'paw-search-mode)
-                                 (paw-search-refresh)
-                               (paw-search-refresh t)))
-                         ;; it is in the server, must delete server's first
-                         (paw-request-delete-words word origin_id
-                                                   (lambda()
-                                                     ;; delete word in db
-                                                     (paw-db-delete word)
-                                                     ;; delete overlay search on the buffers enable `paw-annotation-mode'
-                                                     (paw-delete-word-overlay word)
-                                                     (if (eq major-mode 'paw-search-mode)
-                                                         (paw-search-refresh)
-                                                       (paw-search-refresh t))))))))))))
+                             (paw-search-refresh))
+                         (cl-loop for server in paw-online-word-servers do
+                                  (pcase server
+                                    ('eudic
+                                     ;; it is in the server, must delete server's first
+                                     (paw-request-eudic-delete-word word origin_id
+                                                                     (lambda()
+                                                                       ;; delete word in db
+                                                                       (paw-db-delete word)
+                                                                       ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                                                       (paw-delete-word-overlay word)
+                                                                       (paw-search-refresh))))
+                                    ('anki
+                                     ;; it is in the server, must delete server's first
+                                     (paw-request-anki-delete-word word
+                                                                     (lambda()
+                                                                       ;; delete word in db
+                                                                       (paw-db-delete word)
+                                                                       ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                                                       (paw-delete-word-overlay word)
+                                                                       (paw-search-refresh)))))
+                                  )
+
+                         ))))))))
 
 (defun paw-delete-word-overlay(word)
   "Delete overlay search on the buffers enable `paw-annotation-mode'"
   (-map (lambda (b)
           (with-current-buffer b
-            (if (eq paw-annotation-mode t)
-                (let ((overlays-to-delete
-                       (cl-remove-if-not
-                        (lambda (o) (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
-                        (overlays-in (point-min) (point-max)))))
-                  (dolist (o overlays-to-delete) ; delete all matching overlays
-                    (delete-overlay o))
-                  (setq-local paw-db-update-p t))))) ; update the
+            (if (eq major-mode 'eaf-mode)
+                (eaf-call-async "execute_function_with_args" eaf--buffer-id "paw_delete_word" `,word)
+              (if (eq paw-annotation-mode t)
+                  (let ((overlays-to-delete
+                         (cl-remove-if-not
+                          (lambda (o) (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
+                          (overlays-in (point-min) (point-max)))))
+                    (dolist (o overlays-to-delete) ; delete all matching overlays
+                      (delete-overlay o))
+                    (setq-local paw-db-update-p t))))))
         (buffer-list)))
 
 (defvar paw-copied-entries nil)
@@ -511,7 +507,6 @@ It is fast but has drawbacks:
   (let ((origin-path (paw-get-origin-path)))
     (when (yes-or-no-p (format "Delete all notes under %s? " origin-path))
       (paw-db-delete-words-by-origin_path origin-path)
-      (paw-entry-delete-words-by-origin_path origin-path)
       (if (buffer-live-p (get-buffer "*paw*"))
           (paw t)))))
 
@@ -529,7 +524,7 @@ It is fast but has drawbacks:
 
       ;; update content with gptel
       (if prefix
-          (paw-gptel-update-note id word (car type)
+          (paw-gptel-update-exp id word (car type)
                                  (lambda ()
                                    (when (file-exists-p file)
                                      (let ((buffer (find-buffer-visiting file)))
@@ -538,9 +533,9 @@ It is fast but has drawbacks:
                                        (delete-file file))
                                    (paw-search-refresh)))
         ;; update content with sdcv
-        (paw-update-note
+        (paw-update-exp
          id
-         (s-collapse-whitespace (sdcv-translate-result word sdcv-dictionary-complete-list)))
+         (sdcv-translate-result word sdcv-dictionary-simple-list))
         (message "Update word done.")
         (paw-search-refresh)))))
 
@@ -556,13 +551,16 @@ It is fast but has drawbacks:
   (paw-next)
   (paw-view-note))
 
-
 (defun paw-list-groups ()
   (interactive)
   (if (featurep 'ivy-read)
       (ivy-read "Select the annotation group: " (paw-get-all-origin-path)
                 :action (lambda(x)
+                          (setq paw-group-filteringp t)
+                          (setq paw-search-current-page 1)
                           (paw-search-update-buffer-with-keyword (car x))))
+    (setq paw-group-filteringp t)
+    (setq paw-search-current-page 1)
     (paw-search-update-buffer-with-keyword
      (consult--read (append (paw-get-all-origin-path) (paw-get-all-study-list))
                      :prompt "Select the annotation group: "
@@ -570,15 +568,22 @@ It is fast but has drawbacks:
                      ;;           (car (assoc cand candidates)))
                      ))))
 
-(defun paw-get-eldoc-note ()
-  (let ((entry (get-char-property (point) 'paw-entry)))
-    (if entry
-        (or (alist-get 'note entry) ""))))
-
 (defun paw-get-eldoc-word ()
-  (let ((entry (get-char-property (point) 'paw-entry)))
-    (if entry
-        (or (s-collapse-whitespace (paw-get-real-word entry)) ""))))
+  (let* ((entry (get-char-property (point) 'paw-entry))
+        (word (alist-get 'word entry))
+        (note-type (alist-get 'note_type entry))
+        (exp (alist-get 'exp entry))
+        (note (alist-get 'note entry)))
+    (pcase (car note-type)
+      ('word
+       (if entry
+           (format "%s | %s | %s"
+                   (propertize word 'face 'bold)
+                   (or (s-collapse-whitespace exp) "")
+                   (or (s-collapse-whitespace (replace-regexp-in-string word (propertize word 'face '(bold underline)) note)) "") )))
+      (_ (format "%s | %s"
+                 (propertize (paw-get-real-word word) 'face 'bold)
+                 (or (s-collapse-whitespace note)))))))
 
 (defun paw-search-input ()
   (interactive)
@@ -588,111 +593,18 @@ It is fast but has drawbacks:
          (final-word (read-string (format "Stardict%s: " default) nil nil word)))
     (sdcv-search-detail final-word)))
 
-(defun paw-print-entry--default (entry num)
-  "Print ENTRY to the buffer."
-  (unless (equal entry "")
-    (let (beg end)
-      (setq beg (point))
-      (insert (paw-parse-entry-as-string entry))
-      (setq end (point))
-      (put-text-property beg end 'paw-entry entry)
-      (put-text-property beg end 'paw-id num)
-      (insert "\n"))))
-
-(defun paw-parse-entry-as-string (entry)
-  "Parse the paw ENTRY and return as string."
-  (let* ((word (or (alist-get 'word entry) "NO TITLE"))
-         (exp (alist-get 'exp entry))
-         (content (alist-get 'content entry))
-         (content-json (condition-case nil
-                           (let ((output (json-read-from-string content)))
-                             (if (and (not (eq output nil))
-                                      (not (arrayp output))
-                                      (not (numberp output)))
-                                 output
-                               nil))
-                         (error nil)))
-         (content-filename (or (alist-get 'filename content-json) ""))
-         (content-path (or (alist-get 'path content-json) ""))
-         (serverp (alist-get 'serverp entry))
-         (note (alist-get 'note entry))
-         (note-type (alist-get 'note_type entry))
-         (origin-type (alist-get 'origin_type entry))
-         (origin-path (alist-get 'origin_path entry))
-         (origin-point (alist-get 'origin_point entry))
-         (created-at (alist-get 'created_at entry))
-         (word-width (- (window-width (get-buffer-window (paw-buffer))) 10 paw-trailing-width)))
-    (format "%s %s  %s %s  %s"
-            (paw-format-icon note-type content serverp)
-            (pcase serverp
-              (0
-               (s-pad-right 40 " " (propertize (s-truncate 40 word) 'face '(:foreground "skyblue")) ))
-              (1
-               (s-pad-right 40 " " (propertize (s-truncate 40 word) 'face 'default) ))
-              (2 ;; offline words
-               (paw-format-content note-type word content content-path content-filename))
-              (_
-               (s-pad-right 40 " " (propertize (s-truncate 40 word) 'face 'default) )))
-            (s-pad-right 12 " " (s-truncate 10 created-at ""))
-            (s-pad-right 30 " " (s-collapse-whitespace (s-truncate 30
-                                                                   (if (stringp origin-point)
-                                                                       origin-point
-                                                                     (if origin-path
-                                                                         (pcase origin-type
-                                                                           ('wallabag-entry-mode
-                                                                            (propertize origin-path 'face 'paw-wallabag-face))
-                                                                           ('nov-mode
-                                                                            (propertize (file-name-nondirectory origin-path) 'face 'paw-nov-face))
-                                                                           ((or 'pdf-view-mode 'nov-mode "pdf-viewer")
-                                                                            (propertize (file-name-nondirectory origin-path) 'face 'paw-pdf-face))
-                                                                           ((or 'eaf-mode "browser" 'eww-mode)
-                                                                            (propertize origin-path 'face 'paw-link-face))
-                                                                           (_ (propertize (file-name-nondirectory origin-path ) 'face 'paw-file-face)))
-                                                                         "")))))
-            (s-pad-right 40 " " (s-collapse-whitespace (s-truncate 40 (or exp note "")))))))
 
 (defun paw-quit ()
   "Quit paw."
   (interactive)
   (when (get-buffer "*paw*")
     (quit-window)
-    (kill-buffer "*paw*")
-    (setq paw-search-entries nil)
-    (setq paw-full-entries nil))
-  (let ((buffer (cl-find-if
-                 (lambda (b)
-                   (with-current-buffer b (eq major-mode 'paw-note-mode)))
-                 (buffer-list))))
-    (cond ((get-buffer paw-view-note-buffer-name)
-           (pop-to-buffer paw-view-note-buffer-name))
-          (buffer
-           (pop-to-buffer buffer))))
-
-  ;; close the db, so that it will release the db, and start to sync
-  ;; it is a trade off, we lost load speed
-  ;; TODO Find a better way to release the db
+    (kill-buffer "*paw*"))
+  (setq paw-search-pages 0)
+  (setq paw-search-current-page 1)
+  ;; close the db, so that it will release the db, and start to sync (if use syncthing)
   (paw-close-db)
 
-  ;; (when (eq major-mode 'paw-search-mode)
-  ;;   (cond ((get-buffer paw-view-note-buffer-name)
-  ;;          (pop-to-buffer paw-view-note-buffer-name)
-  ;;          (if (< (length (window-prev-buffers)) 2)
-  ;;              (progn
-  ;;                (delete-window)
-  ;;                (kill-buffer paw-view-note-buffer-name))
-  ;;            (kill-buffer paw-view-note-buffer-name)))
-  ;;         ((get-buffer "*paw*")
-  ;;          (quit-window)
-  ;;          (kill-buffer "*paw*"))))
   )
-
-
-;;; customization
-;; (defun +org/dwim-at-point-advice (orig-fun &rest args)
-;;   (if (get-char-property (point) 'paw-entry)
-;;       (paw-goto-dashboard)
-;;     (apply orig-fun args)))
-
-;; (advice-add '+org/dwim-at-point :around #'+org/dwim-at-point-advice)
 
 (provide 'paw)

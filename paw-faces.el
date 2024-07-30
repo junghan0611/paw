@@ -48,6 +48,10 @@ to show."
   "Face used for overlay."
   :group 'paw-faces)
 
+(defface paw-search-highlight-face
+  '((t :underline t))
+  "Face for the header at point."
+  :group 'paw-faces)
 
 (defface paw-note-header-title-face
   '((((class color) (background light))
@@ -80,9 +84,9 @@ to show."
 
 (defface paw-date-face
   '((((class color) (background light))
-     :foreground "#29838D")
+     :foreground "#8b94a5")
     (((class color) (background dark))
-     :foreground "#8FBCBB")
+     :foreground "#EBCB8B")
     (t :inherit default))
   "Face for the date (last_modified)."
   :group 'paw-faces)
@@ -112,6 +116,20 @@ to show."
      :foreground "#A3BE8C")
     (t :inherit default))
   "Face used for format."
+  :group 'paw-faces)
+
+(defface paw-exp-face
+  '((t :inherit default))
+  "Face used for exp."
+  :group 'paw-faces)
+
+(defface paw-origin-point-face
+  '((((class color) (background light))
+     :foreground "#4F894C")
+    (((class color) (background dark))
+     :foreground "#A3BE8C")
+    (t :inherit default))
+  "Face used for origin-point."
   :group 'paw-faces)
 
 (defface paw-nov-face

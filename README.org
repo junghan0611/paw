@@ -5,11 +5,11 @@
 
 Study for a life in Emacs.
 
-~paw.el~ was created in 2021 as an annotation tool, but I was not used it a lot at that time. Recently I picked it up and dramatically changed its usage. Now it is a complete solution of making annotations and language learning tools, right inside Emacs. 
+~paw.el~ was created in 2021 as an annotation tool, but I was not used it a lot at that time. Recently I picked it up and dramatically changed its usage. Now it is a complete solution of making annotations and language learning tools, right inside Emacs.
 
-paw relies on sqlite. All annotations are saved inside a database, which means it can be easily backup and you can read and make annotation right inside Emacs (PC/mobile) using same database. 
+paw relies on sqlite. All annotations are saved inside a database, which means it can be easily backup and you can read and make annotation right inside Emacs (PC/mobile) using same database.
 
-paw is not a just a dictionary tool. paw was created with in mind that: 
+paw is not just a dictionary tool. paw was created in mind that:
 1. Query word as easy as possible, even no need to click.
 2. Save and trace all known/unknown words and wordlist support, online or offline.
 3. Integrate with other great open source tools, libraries, and dictionaries.
@@ -21,15 +21,16 @@ paw is not a just a dictionary tool. paw was created with in mind that:
 #+begin_quote
 The standout feature of Paw is the ability to scan an entire buffer, tokenize all words, batch-query them, and filter them out according to user-provided tags, ultimately applying overlays alongside meanings to all discovered words. In essence, Paw proactively queries the dictionary on your behalf, making the highlighted word's meaning immediately available.
 
-- This means that you can simply hover your mouse over a word to view its definition, without having to click on it.
+This means that you can simply hover your mouse over a word to view its definition, without having to click on it.
 #+end_quote
 
 This package is mainly used along with:
 1. nov-mode
 2. org-mode
 3. eaf-mode
-3. eww-mode
-4. pdf-view-mode
+4. eww-mode
+5. wallabag-entry-mode
+6. pdf-view-mode
 
 But it is able to work with all modes (defined in ~paw-annotation-mode-supported-modes~) in Emacs.
 
@@ -51,9 +52,12 @@ I'll update the doc in the future, there are too much to cover. But I'll show yo
    annotation location (One useful case is that make highlight or create
    bookmark on ~eww~, and jump back to the exact same annotation location simply
    pressing Enter)
-5. Under the annotation, M-x ~paw-view-notes~, all notes under the same path will
+6. Under the annotation, M-x ~paw-view-notes~, all notes under the same path will
    be shown, giving you an overview on all notes you've made for the same file.
-6. ~paw-add-bookmark~ works great on eww-mode/eaf-mode (browser or pdf-viewer)
+   Or M-x ~paw-find-notes~ to update/save all notes under the same path into an
+   org file under ~paw-note-dir~, and jump to the annotation location inside the
+   org file.
+7. ~paw-add-bookmark~ works great on eww-mode/eaf-mode (browser or pdf-viewer)
 
 
 * Language Learning
@@ -62,36 +66,36 @@ I'll update the doc in the future, there are too much to cover. But I'll show yo
 3. Click/Select word/sentence with ~paw-view-note~, it will show you an
    informative buffer of the word/sentence. It has dictionary, translation,
    notes and also able to search by external browser.
-4. Use ~paw-add-offline-word~ or ~paw-add-online-word~ to add a new word. For online
-   word, currently only support Eudic, apply Authorization key on
-   https://my.eudic.net/OpenAPI/Authorization, and fill it into
-   ~paw-authorization-keys~ before adding online words. All offline/online words
-   appeared on any buffers that were enabled ~paw-annoation-mode~ will be
-   highlighted, useful for language learners using the important method:
-   Repetition.
+4. Use ~paw-add-offline-word~ or ~paw-add-online-word~ to add a new word. For Online
+   words, please check 
+#+html: <a href="#anki-integration">Anki Integration</a>
+#+html: <a href="#eudic-integration">Eudic Integration</a>
+   All offline/online words appeared on any buffers that were enabled
+   ~paw-annoation-mode~ will be highlighted, useful for language learners using
+   the important method: Repetition.
 5. For offline words, please setup ~paw-offline-studylist~ before using it. By
    default we have two offline studylists: =English Studylist= and =Japanese
    Studylist=.
-5. You can also use ~paw-add-word~. Unlike offline/online word, the word added by
+6. You can also use ~paw-add-word~. Unlike offline/online word, the word added by
    ~paw-add-word~ is linked with an unique id, it is only highlighted at the
    location where we added it.
-6. Under any annotation, click or press ~v~ to invoke ~paw-view-note~, a buffer
+7. Under any annotation, click or press ~v~ to invoke ~paw-view-note~, a buffer
    with saved meanings, dictionary, translation, notes is shown.
-7. Under any annotation, click or press ~c~ to invoke
+8. Under any annotation, click or press ~c~ to invoke
    ~paw-change-word-learning-level~, select from level 1~5. 1~4 are controlled by
    ~paw-level-1-word-face~ to ~paw-level-4-word-face~ for online words,
    ~paw-level-1-offline-word-face~ to ~paw-level-4-offline-word-face~ for offline
    words, while 5 is considered as Known word, skipping adding overlay face
    (just hiding). You can change the word to level 5 while keep it hiding, but
    if you don't need it anymore, simply run ~paw-delete-word~ to delete it.
-8. Click/Select word/sentence with ~paw-view-note-current-thing~,
+9. Click/Select word/sentence with ~paw-view-note-current-thing~,
    ~paw-view-note-next-thing~, ~paw-view-note-prev-thing~, it will do segmentation
    using [[https://github.com/ikawaha/kagome][kagome]] (Japanese), and [[https://github.com/skywind3000/ECDICT][ECDICT]] (English).
-9. Check https://www.lingq.com/en/, you know more ideas how to learn a foreign
-   language with ~paw.el~.
-10. Run ~paw-export-notes-to-csv~, check the csv file under ~paw-csv-file~, import it
+10. Check https://www.lingq.com/en/, you know more ideas how to learn a foreign
+    language with ~paw.el~.
+11. Run ~paw-export-notes-to-csv~, check the csv file under ~paw-csv-file~, import it
     to [[https://apps.ankiweb.net/][Anki]] for further studying.
-11. Both ~paw-add-word~ and ~paw-add-online-word~ will capture the context sentence
+12. Both ~paw-add-word~ and ~paw-add-online-word~ will capture the context sentence
     and save it into Notes field.
 
 Tip: Find some interesting contents on LingQ, and browse using eww, enable
@@ -124,15 +128,24 @@ Set ~paw-detect-language-p~ to t, and run ~pip install gcld3~, paw will use gcld
 (may use others tools in the future, check ~paw-detect-language-program~) to
 detect the language for more accurate tts pronunciation and translation.
 
+For android install:
+#+begin_src sh
+pkg install tur-repo # https://github.com/termux-user-repository/tur
+pkg install python3.10 # install python 3.10 (newer versions may not work at the time of writing)
+apt update
+apt install protobuf
+pip3.10 install gcld3
+#+end_src
+
 If you don't want to use language detection program, paw use simple ascii rate:
 ~paw-ascii-rate~ to detect the language, if the rate is greater than
 ~paw-ascii-rate~, then it is considered as English, otherwise use
 ~paw-detect-language-program~ to detect the language of the TEXT, if
 ~paw-detect-language-p~ is t, or return as ~paw-non-ascii-language~ if
-~paw-detect-language-p~ is nil. 
+~paw-detect-language-p~ is nil.
 
 Setup ~paw-python-program~ if necessary, if the pip module is installed with
-different python version
+different python version, for android, set it to =python3.10=
 
 Supported edge-tts voice:
 - ~paw-tts-english-voice~
@@ -142,16 +155,102 @@ Supported edge-tts voice:
 - ~paw-tts-korean-voice~
 - Other languages: ~paw-tts-multilingual-voice~
 Welcome PRs to add more languages :)
+
+** Anki Integration
+1. PC: Install Anki.
+2. PC: Install AnkiConnect, add-on code: 2055492159.
+3. Android: Install AnkiDroid from F-Driod (We need it has full media access
+   right, so that Emacs can copy audio files to it. Instead of using AnkiConect
+   to download the audio, paw will download and cache the audio in
+   ~paw-tts-cache-dir~ after the voice is pronounced.).
+4. Android: Install [[https://github.com/KamWithK/AnkiconnectAndroid][AnkiconnectAndroid]] 
+5. Install [[https://github.com/anki-editor/anki-editor][Anki Editor]] if not installed.
+6. If you just want to try or use the default settings. Please download the
+   default template [[https://github.com/Eltaurus-Lt/Anki-Card-Templates][Memrise Templates (Lτ) v3.32.apkg]] and import it into anki
+   then you are all done.
+
+If you want to use different template,
+1. Run ~paw-anki-configure-card-format~ to choose from default templates ~paw-anki-templates~, or configure deck, note type, filed-name, and filed-values one by one temporarily.
+    Currently Supported field-value:
+   - =word=: the word to learn
+   - =exp=: the explanation of the word
+   - =sound=: the sound file of the word
+   - =note=: the note of the word
+   - ~cloze_note~: the note of the word, word is clozed
+   - ~cloze_note_exp_hint~: the note of the word, word is clozed, use exp as hint
+   - =choices=: the choices of the word
+   - =nil=: empty field
+   - Other values: the value of the field, it must be a string
+2. If you want to make it permanent, set ~paw-anki-deck~, ~paw-anki-note-type~,
+   ~paw-anki-field-names~ and ~paw-anki-field-values~ manually in your config,
+3. Configure ~paw-online-word-servers~, =(setq paw-online-word-servers '(anki))= to enable anki server, or =(setq paw-online-word-servers '(eudic anki))= to enable both eudic and anki servers.
+
+PS:
+All types of annotations (not all are tested) could be added into Anki. Either using ~paw-add-online-word~ (anywhere), or ~paw-anki-editor-push-note(s)~ (dashboard) ~paw-anki-editor-delete-note(s)~ (dashboard).
+
+
+~paw-anki-editor-delete-note~: Delete note at point to Anki.
+
+~paw-anki-editor-push-note~: Push note at point to Anki.
+
+~paw-anki-editor-push-notes~: Push notes of marked-entries in dashboard to anki,
+or push all anki notes in the same origin path (same file or same buffer). Same
+file name under ~paw-annotation-search-paths~ is also considerred same origin
+path.
+
+~paw-anki-editor-delete-notes~: Delete anki notes of marked-entries in dashboard,
+or delete all anki notes in the same origin path (same file or same buffer),
+Same file name under ~paw-annotation-search-paths~ is also considerred same
+origin path.
+
+Other templates:
+[[https://forums.ankiweb.net/t/memrise-card-template-support-thread/34233/18][MemCloze.apkg]]
+
+** Eudic Integration
+1. Apply Authorization key on https://my.eudic.net/OpenAPI/Authorization, and fill it into ~paw-authorization-keys~ before adding online words.
+2. Configure ~paw-online-word-servers~, =(setq paw-online-word-servers '(eudic))= to enable Eudic server, or =(setq paw-online-word-servers '(eudic anki))= to enable both eudic and anki servers.
+
+PS:
+Only online words can be added into Eudic. Mainly via command ~paw-add-online-word~
+
+** EAF Integration
+Use my fork: https://github.com/chenyanming/eaf-browser which adds paw support.
+
+
 ** [[file:ENGLISH.org][English Configuration]]
 ** [[file:JAPANESE.org][Japanese Configuration]]
 
+* Database Synchronization
+I personally use [[https://syncthing.net/][Syncting]] to share the database between PC and Android. The
+drawback is that, if the database is in used in any party, the synchronization
+will stop. You can run ~paw-db-sync~ to close the connection with the database or
+close Emacs directly before Synchronization.
+
 * My Setup
 #+begin_src emacs-lisp
+
 (use-package paw
   :init
   (setq paw-db-file (expand-file-name "paw.sqlite" org-directory))
   ;; ecdict dictionary
   (setq paw-ecdict-db (expand-file-name "stardict.db" org-directory))
+  ;; setup ECDICT before using it, and create the files manually if not exist
+  (setq paw-ecdict-wordlist-files `(
+                                    ,(expand-file-name "美国当代英语语料库.csv" org-directory) ;; https://www.eapfoundation.com/vocab/academic/other/mawl/
+                                    ,(expand-file-name "mawl.csv" org-directory) ;; https://www.eapfoundation.com/vocab/academic/other/mawl/
+                                    ,(expand-file-name "opal.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
+                                    ,(expand-file-name "5000.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
+                                    ,(expand-file-name "极品GRE红宝书.csv" org-directory)
+                                    ,(expand-file-name "gre.txt" org-directory)
+                                    ,(expand-file-name "托福绿宝书.csv" org-directory)
+                                    ,(expand-file-name "2021_Teachers_AcademicCollocationList.csv" org-directory) ;; https://www.pearsonpte.com/teachers/academic-collocation
+                                    ,(expand-file-name "The Unofficial Harry Potter Vocabulary Builder.csv" org-directory)
+                                    ,(expand-file-name "Illustrated Everyday Expressions with Stories.csv" org-directory)
+                                    ,(expand-file-name "Essential Idioms in English.csv" org-directory)
+                                    ,(expand-file-name "idioms.txt" org-directory)
+                                    ,(expand-file-name "phrase-list.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
+                                    ,(expand-file-name "英语生词本.csv" org-directory)
+                                    ))
   ;; setup ECDICT before using it, and create the files manually if not exist
   (setq paw-ecdict-known-words-files `(,(expand-file-name "eudic.csv" org-directory)
                                        ,(expand-file-name "english.txt" org-directory)))
@@ -161,23 +260,35 @@ Welcome PRs to add more languages :)
   ;; jlpt dictionary
   (setq paw-jlpt-db (expand-file-name "japanese.db" org-directory))
   ;; setup jlpt before using it, and create the files manually if not exist
+  (setq paw-jlpt-wordlist-files `(,(expand-file-name "日语生词本.csv" org-directory)
+                                  ,(expand-file-name "日本语红宝书.csv" org-directory)
+                                  ,(expand-file-name "蓝宝书日语文法.csv" org-directory)
+                                  ,(expand-file-name "NEW-JLPT.csv" org-directory)
+                                    ))
+  ;; setup jlpt before using it, and create the files manually if not exist
   (setq paw-jlpt-known-words-files `(,(expand-file-name "japanese.txt" org-directory)))
   ;; setup jlpt before using it, and create the file manually if not exists
   (setq paw-jlpt-default-known-words-file (expand-file-name "japanese.txt" org-directory))
   :custom
   ;; (paw-svg-enable t)
-  (paw-pbm-enable t)
+  ;; Use pbm buttons on android
+  (paw-pbm-enable (if (eq system-type 'android) t))
+  ;; Use all the icons icon on dashboard
+  (paw-all-the-icons-icon-enable t)
+  ;; Use all the icons button on non-android system
+  (paw-all-the-icons-button-enable (unless (eq system-type 'android) t))
   (paw-detect-language-p t)
   (paw-python-program (if (string-equal system-type "android") "python3.10" "python3"))
   (paw-detect-language-program 'gcld3) ;; android can only install cld3
   (paw-click-overlay-enable t)
   (paw-annotation-read-only-enable t)
-  (paw-annotation-show-unknown-words-p t) ;; setup ECDICT before using it
-  (paw-ecdict-frq 3000) ;; setup ECDICT before using it
-  (paw-ecdict-bnc 3000) ;; setup ECDICT before using it
-  (paw-ecdict-tags "cet6 ielts toefl gre") ;; setup ECDICT before using it
-  (paw-ecdict-oxford 0) ;; setup ECDICT before using it
-  (paw-ecdict-collins-max-level 4) ;; to setup ECDICT before using it
+  (paw-annotation-show-wordlists-words-p t) ;; setup ECDICT before using it
+  (paw-annotation-show-unknown-words-p nil) ;; setup ECDICT before using it
+  (paw-ecdict-frq 3000) ;; all possible words, 0 no frq data
+  (paw-ecdict-bnc -1) ;; all possible words, 0 no bnc data
+  (paw-ecdict-tags "cet4 cet6 ielts toefl gre empty") ;; no easy words
+  (paw-ecdict-oxford 0) ;; no easy words
+  (paw-ecdict-collins-max-level 3) ;; no easy words
   ;; (paw-posframe-p (if (string-equal system-type "android") t))
   ;; For online words, you have to apply api on
   ;; https://my.eudic.net/OpenAPI/Authorization
@@ -196,9 +307,10 @@ Welcome PRs to add more languages :)
   ;; show the note both in minibuffer or/and *paw-view-note*
   ;; To use this, you need to setup ECDICT (English) or JLPT (Japanese) before
   ;; use this, otherwise, use the 'buffer instead
-  (paw-view-note-show-type (if (eq system-type 'android) 'minibuffer 'all))
+  (paw-view-note-show-type (if (eq system-type 'android) 'buffer 'all))
   ;; must be one of the studylist name in `paw-studylist', please run `paw-get-all-studylist' to get the available studylists.
   (paw-default-online-studylist "ID: 133584289117482484, Language: en, Name: Business")
+  ;; (paw-default-online-studylist "ID: 133616431737936696, Language: en, Name: 00 Japanese Mini Stories")
   (paw-offline-studylist '(("English Studylist" ;; studylist name when choosing offline studylist
                             (id . "1") ;; random id for internal use, but it could not be the same as any id in online study list defined in `paw-studylist'
                             (language . "en") ;; language of the studylist
@@ -209,6 +321,9 @@ Welcome PRs to add more languages :)
                             (name . "Japanese"))))
   ;; must be one of the studylist name in `paw-offline-studylist'
   (paw-default-offline-studylist "English Studylist")
+  (paw-search-page-max-rows (if (eq system-type 'android) 31 41))
+  (paw-add-offline-word-without-asking t)
+  (paw-add-online-word-without-asking t)
   :config
   (setq paw-note-dir (expand-file-name "Dict_Notes" org-directory))
   ;; if the file was moved to other places after adding annotations, we can add
@@ -229,11 +344,22 @@ Welcome PRs to add more languages :)
   (add-hook 'context-menu-functions #'paw-annotation-context-menu)
 
   (unless (string-equal system-type "android")
-      (setq paw-dictionary-browse-function 'popweb-url-input)
-      (setq paw-mdict-dictionary-function 'popweb-url-input))
+      (setq paw-dictionary-browse-function 'eaf-browse)
+      (setq paw-mdict-dictionary-function 'eaf-browse))
 
+  ;; my personal configs
+  (add-hook 'paw-view-note-mode-hook #'paw-view-note-setup)
+  (add-hook 'paw-annotation-mode-hook #'paw-annotation-setup)
   )
 
+(defun paw-view-note-setup ()
+  (org-writeroom-setup)
+  (org-modern-mode)
+  (pangu-spacing-mode))
+
+(defun paw-annotation-setup()
+  ;; TODO need manual enable later
+  (flyspell-mode -1))
 #+end_src
 * Demos
 
@@ -263,6 +389,5 @@ https://t.me/emacs_paw
 6. go-translate
 7. Eudic
 8. 蒙哥阅读器
-9. 
-
-
+9. Anki
+10. [[https://github.com/themoeway/yomitan][Yomitan]]

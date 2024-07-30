@@ -6,6 +6,7 @@
 (require 'paw-faces)
 (require 'paw-svg)
 (require 'paw-sdcv)
+(require 'paw-anki)
 
 (require 'evil-core nil t)
 (require 'posframe nil t)
@@ -34,6 +35,7 @@
 (defvar paw-note-origin-type nil)
 (defvar paw-note-origin-path nil)
 (defvar paw-note-note nil)
+(defvar paw-note-lang nil)
 (defvar paw-note-header-function #'paw-note-header
   "Function that returns the string to be used for the Calibredb edit note header.")
 
@@ -90,6 +92,7 @@
          (no-note-header (plist-get properties :no-note-header))
          (find-note (plist-get properties :find-note))
          (export (plist-get properties :export))
+         (anki-editor (plist-get properties :anki-editor))
          (multiple-notes (plist-get properties :multiple-notes))
          (exp (alist-get 'exp entry))
          (content (alist-get 'content entry))
@@ -103,6 +106,7 @@
                          (error nil)))
          (content-filename (or (alist-get 'filename content-json) ""))
          (content-path (or (alist-get 'path content-json) ""))
+         (anki-note-id (alist-get 'anki-note-id content-json))
          (note (alist-get 'note entry))
          (note-type (alist-get 'note_type entry))
          (serverp (alist-get 'serverp entry))
@@ -113,6 +117,7 @@
          (created-at (alist-get 'created_at entry))
          (kagome (or (plist-get properties :kagome) (alist-get 'kagome entry)))
          (lang (alist-get 'lang entry))
+         (sound (alist-get 'sound entry))
          beg)
 
     ;; workaround: avoid org-modern clear my display
@@ -123,55 +128,69 @@
         (face-remap-add-relative 'pangu-spacing-separator-face 'org-block))
     (insert "* ")
     (if multiple-notes
-        (progn (insert (format "[[paw:%s][%s]]" (alist-get 'word entry) (s-collapse-whitespace word))
-                " "
-                paw-return-button
-                " ")
-
-               (insert paw-default-play-button " ")
-               (if (eq serverp 3)
-                   (insert paw-add-button " "))
-               (insert paw-delete-button " ")
-               (insert paw-goldendict-button " ")
-               (pcase serverp
-                 (1 (insert paw-level-1-button))
-                 (4 (insert paw-level-2-button))
-                 (5 (insert paw-level-3-button))
-                 (6 (insert paw-level-4-button))
-                 (7 (insert paw-level-5-button))
-                 (8 (insert paw-level-1-button))
-                 (9 (insert paw-level-2-button))
-                 (10 (insert paw-level-3-button))
-                 (11 (insert paw-level-4-button))
-                 (12 (insert paw-level-5-button))
-                 (_ nil))
+        (progn (insert (format "[[paw:%s][%s]]" (alist-get 'word entry) (s-collapse-whitespace word)))
+               (unless anki-editor
+                 (insert " " paw-return-button " " )
+                 (insert paw-default-play-button " ")
+                 (insert paw-play-source-button " ")
+                 (if (eq serverp 3)
+                     (insert paw-add-button " "))
+                 (insert paw-delete-button " ")
+                 (insert paw-goldendict-button " ")
+                 (pcase serverp
+                   (1 (insert paw-level-1-button))
+                   (4 (insert paw-level-2-button))
+                   (5 (insert paw-level-3-button))
+                   (6 (insert paw-level-4-button))
+                   (7 (insert paw-level-5-button))
+                   (8 (insert paw-level-1-button))
+                   (9 (insert paw-level-2-button))
+                   (10 (insert paw-level-3-button))
+                   (11 (insert paw-level-4-button))
+                   (12 (insert paw-level-5-button))
+                   (_ nil)) )
                )
       (insert (s-collapse-whitespace word)  " "))
     (insert "\n")
-    (org-entry-put nil paw-file-property-id (alist-get 'word entry))
-    (pcase origin-type
-      ('nov-mode
-       (org-entry-put nil paw-file-property-doc-file origin-path))
-      ('pdf-view-mode
-       (org-entry-put nil paw-file-property-doc-file origin-path))
-      ('wallabag-entry-mode
-       (require 'wallabag)
-       (org-entry-put nil paw-file-property-doc-file (number-to-string (if (numberp origin-id) origin-id 0))))
-      (_
-       (if origin-path
-           (org-entry-put nil paw-file-property-doc-file origin-path) )))
-    (pcase origin-type
-      ('nov-mode
-       (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
-      ('wallabag-entry-mode
-       (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
-      ('pdf-view-mode
-       (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
-      (_
-       (if origin-point
-           (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))))
-    (if created-at
-        (org-entry-put nil "CREATED_AT" created-at))
+    (unless anki-editor
+      (org-entry-put nil paw-file-property-id (alist-get 'word entry))
+      (pcase origin-type
+        ('nov-mode
+         (org-entry-put nil paw-file-property-doc-file origin-path))
+        ('pdf-view-mode
+         (org-entry-put nil paw-file-property-doc-file origin-path))
+        ('wallabag-entry-mode
+         (require 'wallabag)
+         (org-entry-put nil paw-file-property-doc-file (number-to-string (if (numberp origin-id) origin-id 0))))
+        (_
+         (if origin-path
+             (org-entry-put nil paw-file-property-doc-file origin-path) )))
+      (pcase origin-type
+        ('nov-mode
+         (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
+        ('wallabag-entry-mode
+         (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
+        ('pdf-view-mode
+         (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))
+        (_
+         (if origin-point
+             (org-entry-put nil paw-file-property-note-location (replace-regexp-in-string "\n" "" (pp-to-string origin-point))))))
+      (org-entry-put nil "LANGUAGE" lang)
+      (if created-at
+          (org-entry-put nil "CREATED_AT" created-at)) )
+
+    (when anki-editor
+      (insert ":PROPERTIES:\n")
+      (insert ":" paw-anki-property-deck ": " paw-anki-deck "\n")
+      (insert ":" paw-anki-property-notetype ": " paw-anki-note-type "\n")
+      (if anki-note-id
+          (insert ":" paw-anki-property-note-id ": " anki-note-id "\n"))
+      ;; (org-entry-put nil paw-anki-property-deck paw-anki-deck)
+      ;; (org-entry-put nil paw-anki-property-notetype paw-anki-note-type)
+      (insert ":END:\n")
+      )
+
+
     (pcase (car note-type)
       ('image
        (insert "#+attr_org: :width 600px\n")
@@ -244,17 +263,17 @@
           (insert paw-share-button " ")
           (insert "\n"))
 
-
-         (when (or
-                multiple-notes ;; we need the buttons on paw-view-notes
-                (and (stringp exp) ) ) ;; dont show it if empty
+         (when (and (or multiple-notes (and (stringp exp))) (not anki-editor))
            (insert "** Saved Meanings ")
            ;; unknown words could have Saved Meanings but shouldn't be able to edit
            ;; because the Saved Meanings are from Internal Dictionaries
            (unless (eq serverp 3)
                (insert paw-edit-button))
            (insert "\n")
-           (paw-insert-and-make-overlay (substring-no-properties (if exp (concat exp "\n") "")) 'face 'org-block)
+           (paw-insert-and-make-overlay "#+BEGIN_SRC sdcv\n" 'invisible t)
+           (insert (format "%s" (or exp "")))
+           (paw-insert-and-make-overlay "#+END_SRC" 'invisible t)
+           (insert "\n")
            )
 
          ;; TODO use unique overlay instead of search string
@@ -262,6 +281,7 @@
              (unless multiple-notes
                (insert "** Meaning ")
                (insert paw-default-play-button " ")
+               (insert paw-play-source-button " ")
                (if (eq serverp 3)
                    (insert paw-add-button " ")
                  (if (or (paw-online-p serverp)
@@ -275,6 +295,7 @@
            (unless multiple-notes
              (insert "** Meaning ")
              (insert paw-default-play-button " ")
+             (insert paw-play-source-button " ")
              (if (eq serverp 3)
                  (insert paw-add-button " ")
                (if (or (paw-online-p serverp)
@@ -303,41 +324,87 @@
              ))
          )))
 
-    (when find-note
-      (insert "** Saved Meanings\n")
-      (if (stringp exp)
-          (insert (substring-no-properties exp) "\n")
-        (insert "\n\n")))
+    (unless anki-editor
+      (when find-note
+        (insert "** Saved Meanings\n")
+        (if (stringp exp)
+            (insert (substring-no-properties exp) "\n")
+          (insert "\n\n")))
+      (unless no-note-header
+        (insert "** Notes ")
+        (unless (eq serverp 3)
+          (insert paw-edit-button))
+        (insert "\n"))
+      (if (stringp note)
+          ;; bold the word in note
+          (let ((bg-color (face-attribute 'org-block :background)))
+            (paw-insert-and-make-overlay
+             (replace-regexp-in-string word (concat "*" word "*") (substring-no-properties note))
+             'face `(:background ,bg-color :extend t))
+            (insert "\n"))
+        (insert "\n")))
+
+    (when anki-editor
+      (if (file-exists-p paw-anki-media-dir)
+          (if (and paw-anki-deck paw-anki-note-type paw-anki-field-names)
+              (if (= (length paw-anki-field-names) (length paw-anki-field-values))
+                  (cl-loop for field-name in paw-anki-field-names and i from 0 do
+                           (insert "** " field-name "\n")
+                           (let ((field-value (nth i paw-anki-field-values)))
+                             (pcase field-value
+                               ('word
+                                (insert word "\n"))
+                               ('exp
+                                (insert (or exp "") "\n"))
+                               ('sound
+                                (if (and sound
+                                         (file-exists-p sound)
+                                         ;; sometimes edge-tts created the file but no sound in it
+                                         (> (file-attribute-size (file-attributes sound)) 0))
+                                    (if (eq system-type 'android)
+                                        ;; old copy way, works on android
+                                        (progn
+                                          (insert "[sound:" (file-name-nondirectory sound) "]\n")
+                                          (copy-file sound paw-anki-media-dir t) )
+                                      ;; anki editor way, anki connect will download it
+                                      (insert "[[file:" sound "]]\n"))
+                                  (insert "\n")))
+                               ('note
+                                (insert (replace-regexp-in-string word (concat "*" word "*") (substring-no-properties note)) "\n"))
+                               ('cloze_note
+                                (insert (replace-regexp-in-string word (concat "{{c1::" word "}}") (substring-no-properties note)) "\n"))
+                               ('cloze_note_exp_hint
+                                (insert (replace-regexp-in-string word (concat "{{c1::" word "::" exp "}}") (substring-no-properties note)) "\n"))
+                               ('file
+                                (insert (if origin-path
+                                            (pcase origin-type
+                                              ((or 'wallabag-entry-mode 'eaf-mode "browser" 'eww-mode)
+                                               origin-path)
+                                              (_ (file-name-nondirectory origin-path )))
+                                          (if (and origin-point (stringp origin-point))
+                                              origin-point)) "\n"))
+                               ('choices
+                                (insert (mapconcat (lambda(entry)
+                                             (alist-get 'word entry))
+                                           (paw-candidates-by-origin-path-serverp t) "|") "\n" ))
+                               ('nil (insert ""))
+                               (x
+                                (insert x))
+
+                               ) )
+
+                           )
+                (error "Field names and values are not matched."))
+            (paw-anki-configure-card-format))
+        (error "paw-anki-media-dir was not configured, otherwise we can not add sound file.")
+        )
 
 
-    (unless no-note-header
-      (insert "** Notes ")
-      (unless (eq serverp 3)
-        (insert paw-edit-button))
-      (insert "\n")
+
+
+
+
       )
-
-    ;; highlight the word part in note
-    ;; it has bug during view-notes or find-notes
-    ;; (if (or (eq origin-type 'nov-mode) (eq origin-type 'wallabag-entry-mode))
-    ;;     (progn
-    ;;       (setq beg (point))
-    ;;       (insert (substring-no-properties note))
-    ;;       (goto-char beg)
-    ;;       (unless (string-match-p "\n" word)
-    ;;         (when (re-search-forward word (point-max) t)
-    ;;           (insert "~")
-    ;;           (goto-char (match-beginning 0))
-    ;;           (insert "~"))))
-    ;;   (insert (substring-no-properties note)))
-    (if (stringp note)
-        ;; bold the word in note
-        (let ((bg-color (face-attribute 'org-block :background)))
-          (paw-insert-and-make-overlay
-           (replace-regexp-in-string word (concat "*" word "*") (substring-no-properties note))
-           'face `(:background ,bg-color :extend t))
-          (insert "\n"))
-      (insert "\n"))
 
 
     ))
@@ -564,12 +631,15 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
   (let ((map (make-sparse-keymap)))
     (define-key map "s" #'paw-view-note)
     (define-key map "r" #'paw-view-note-play)
-    (define-key map "n" #'paw-view-next-note)
-    (define-key map "p" #'paw-view-prev-note)
+    (define-key map "R" #'paw-view-note-replay)
+    (define-key map "n" #'paw-next-annotation)
+    (define-key map "p" #'paw-previous-annotation)
+    (define-key map "M-n" #'paw-view-next-note)
+    (define-key map "M-p" #'paw-view-prev-note)
     (define-key map "gr" #'paw-view-note-refresh)
     (define-key map "C-n" #'paw-view-note-next-thing)
     (define-key map "C-p" #'paw-view-note-prev-thing)
-    ;; (define-key map "q" #'paw-view-note-quit)
+    (define-key map "x" #'paw-view-note-quit)
     (define-key map "a" #'paw-add-online-word)
     (define-key map "A" #'paw-add-offline-word)
     (define-key map "d" #'paw-delete-button-function)
@@ -581,12 +651,16 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
       (kbd "&") 'paw-find-origin-in-note
       (kbd "s") 'paw-view-note
       (kbd "r") 'paw-view-note-play
-      (kbd "n") 'paw-view-next-note
-      (kbd "p") 'paw-view-prev-note
+      (kbd "R") 'paw-view-note-replay
+      (kbd "n") 'paw-next-annotation
+      (kbd "p") 'paw-previous-annotation
+      (kbd "N") 'paw-previous-annotation
+      (kbd "M-n") 'paw-view-next-note
+      (kbd "M-p") 'paw-view-prev-note
       (kbd "g r") 'paw-view-note-refresh
       (kbd "C-n") 'paw-view-note-next-thing
       (kbd "C-p") 'paw-view-note-prev-thing
-      ;; (kbd "q") 'paw-view-note-quit
+      (kbd "x") 'paw-view-note-quit
       (kbd "a") 'paw-add-online-word
       (kbd "A") 'paw-add-offline-word
       (kbd "d") 'paw-delete-button-function
@@ -669,13 +743,11 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
     )
 
   (when (eq major-mode 'paw-view-note-mode)
-    (kill-buffer-and-window)
-
-    ;; (if (< (length (window-prev-buffers)) 2)
-    ;;     (progn
-    ;;       (quit-window)
-    ;;       (kill-buffer paw-view-note-buffer-name))
-    ;;   (kill-buffer))
+    (if (< (length (window-prev-buffers)) 2)
+        (progn
+          (quit-window)
+          (kill-current-buffer))
+      (kill-buffer-and-window))
     )
   )
 
@@ -696,8 +768,8 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
   (let* ((entry (paw-view-note-get-entry entry)) ;; !!! property word is not pure! eaf has error!
          (no-pushp (plist-get properties :no-pushp))
          (buffer-name (plist-get properties :buffer-name))
+         (display-func (plist-get properties :display-func))
          (origin-word (alist-get 'word entry))
-         ;; (entry (cl-find-if (lambda (x) (equal origin-word (alist-get 'word x))) paw-full-entries)) ; search back the paw-search-entries
          (word (let ((real-word (paw-get-real-word origin-word)))
                  (if (s-blank-str? real-word)
                      ;; (error "Please select a word or sentence.")
@@ -716,7 +788,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
          ;; (content-filename (or (alist-get 'filename content-json) ""))
          ;; (content-path (or (alist-get 'path content-json) ""))
          (serverp (alist-get 'serverp entry))
-         (note (if (eq serverp 3) ;; for UNKNOWN word, we get note during view note
+         (note (if (and (eq serverp 3) (not (alist-get 'note entry))) ;; for UNKNOWN word, we get note during view note
                    (setf (alist-get 'note entry) (paw-get-note))
                  (alist-get 'note entry)))
          (note-type (alist-get 'note_type entry))
@@ -743,7 +815,8 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
                      (get-buffer paw-view-note-buffer-name) ))) ;; otherwise, use `paw-view-note-buffer-name'
          (buffer (if (buffer-live-p buffer)
                      buffer
-                   (get-buffer-create paw-view-note-buffer-name))))
+                   (get-buffer-create paw-view-note-buffer-name)))
+         (org-mode-hook nil))
 
     ;; deactivate mark before showing *paw-view-note*
     (if mark-active
@@ -764,7 +837,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
       ((or 'image 'attachment) nil)
       (_
        (if paw-say-word-p
-           (funcall paw-default-say-word-function (paw-remove-spaces word lang) lang))))
+           (setf (alist-get 'sound entry) (funcall paw-default-say-word-function (paw-remove-spaces word lang) :lang lang)))))
 
     (when (or (eq paw-view-note-show-type 'minibuffer)
             (eq paw-view-note-show-type 'all))
@@ -774,14 +847,14 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
       ;;     (message (paw-remove-spaces exp lang))
       ;;   (funcall paw-dictionary-function word))
 
-      (funcall paw-dictionary-function word)
+      (funcall paw-dictionary-function word lang)
       )
 
     (when (or (eq paw-view-note-show-type 'buffer)
             (eq paw-view-note-show-type 'all))
         (with-current-buffer buffer
           (let ((inhibit-read-only t))
-            (org-mode)
+            ;; (org-mode)
             (goto-char (point-min))
             (erase-buffer)
             ;; (unless (search-forward "#+TITLE" nil t)
@@ -796,6 +869,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
             (setq-local paw-note-target-buffer target-buffer)
             (setq-local paw-note-word origin-word)
             (setq-local paw-note-note note)
+            (setq-local paw-note-lang lang)
             (setq-local paw-note-entry entry)
             (setq-local paw-note-origin-type (or origin-type major-mode))
             (setq-local paw-note-origin-path (or origin-path (paw-get-origin-path)))
@@ -823,11 +897,12 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
             (setq-local header-line-format '(:eval (funcall paw-view-note-header-function)))
 
             ;; find the origin-word in database, if it exist, add overlays inside `paw-view-note-buffer-name' buffer
-            (pcase (car note-type)
-              ('word (if (paw-online-p serverp) ;; only online words
-                         (let ((entry (paw-candidate-by-word origin-word)))
-                           (when entry
-                             (paw-show-all-annotations entry))) ))))
+            ;; (pcase (car note-type)
+            ;;   ('word (if (paw-online-p serverp) ;; only online words
+            ;;              (let ((entry (paw-candidate-by-word origin-word)))
+            ;;                (when entry
+            ;;                  (paw-show-all-annotations entry))) )))
+            )
 
           ;; Android TBC: The translate process seems need to run inside of the buffer, otherwise, it will cause error
           ;; async translate the word
@@ -844,7 +919,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
           )
       ;; pop to paw-view-note find the correct position
       (if (not paw-posframe-p)
-          (pop-to-buffer buffer)
+          (funcall (or display-func 'pop-to-buffer) buffer)
         (unless (eq major-mode 'paw-view-note-mode)
           (posframe-show buffer
                          :poshandler 'posframe-poshandler-point-window-center
@@ -982,17 +1057,49 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
     (paw-view-note (if word entry (paw-new-entry final-word) ))))
 
 ;;;###autoload
-(defun paw-view-note-play()
-  "play the word in the note or play the word after getting the entry."
-  (interactive)
+(defun paw-view-note-play (arg)
+  "play the word in the note or play the word after getting the entry.
+When ARG, ask you to select a audio source."
+  (interactive "P")
   (cond ((eq major-mode 'paw-view-note-mode)
-         (funcall paw-default-say-word-function (paw-get-real-word (paw-note-word))))
+         (if arg
+             (funcall paw-default-say-word-function (paw-get-real-word (paw-note-word)) :source t)
+           (funcall paw-default-say-word-function (paw-get-real-word (paw-note-word)))))
         (mark-active
-         (funcall paw-default-say-word-function (buffer-substring-no-properties (region-beginning) (region-end))))
+         (if arg
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (region-beginning) (region-end)) :source t)
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (region-beginning) (region-end))) ))
         ((bound-and-true-p focus-mode)
-         (funcall paw-default-say-word-function (buffer-substring-no-properties (car (focus-bounds)) (cdr (focus-bounds)))))
+         (if arg
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (car (focus-bounds)) (cdr (focus-bounds))) :source t)
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (car (focus-bounds)) (cdr (focus-bounds)))) ))
         (t
-         (funcall paw-default-say-word-function (alist-get 'word (paw-view-note-get-entry))))))
+         (if arg
+             (funcall paw-default-say-word-function (alist-get 'word (paw-view-note-get-entry)) :source t)
+             (funcall paw-default-say-word-function (alist-get 'word (paw-view-note-get-entry))) ))))
+
+
+(defun paw-view-note-replay (arg)
+  "play the word in the note or play the word after getting the entry.
+When ARG, ask you to select a audio source.
+Always re-download the audio."
+  (interactive "P")
+  (cond ((eq major-mode 'paw-view-note-mode)
+         (if arg
+             (funcall paw-default-say-word-function (paw-get-real-word (paw-note-word)) :refresh t :source t)
+           (funcall paw-default-say-word-function (paw-get-real-word (paw-note-word)) :refresh t)))
+        (mark-active
+         (if arg
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (region-beginning) (region-end)) :refresh t :source t)
+           (funcall paw-default-say-word-function (buffer-substring-no-properties (region-beginning) (region-end))  :refresh t )))
+        ((bound-and-true-p focus-mode)
+         (if arg
+             (funcall paw-default-say-word-function (buffer-substring-no-properties (car (focus-bounds)) (cdr (focus-bounds))) :refresh t :source t)
+           (funcall paw-default-say-word-function (buffer-substring-no-properties (car (focus-bounds)) (cdr (focus-bounds))) :refresh t ) ))
+        (t
+         (if arg
+             (funcall paw-default-say-word-function (alist-get 'word (paw-view-note-get-entry)) :refresh t :source t)
+           (funcall paw-default-say-word-function (alist-get 'word (paw-view-note-get-entry)) :refresh t ) ))))
 
 ;;;###autoload
 (defun paw-view-next-note ()
@@ -1021,7 +1128,7 @@ Bound to \\<C-cC-k> in `paw-note-mode'."
 
 ;;;###autoload
 (defun paw-view-notes (&optional path)
-  "View all notes under the same path of the current note. If PATH
+  "View all notes/overlays under the same path of the current note. If PATH
 is provided, use PATH instead."
   (interactive)
   (let* ((entry-at-point (get-char-property (point) 'paw-entry))
@@ -1029,24 +1136,26 @@ is provided, use PATH instead."
          (marked-entries (if (eq major-mode 'paw-search-mode)
                              (paw-find-marked-candidates)))
          (entries (or marked-entries (paw-candidates-by-origin-path origin-path-at-point)))
+         (paw-get-note-during-paw-view-notes t) ;; BE CAREFUL: for UNKNOWN word, we get note during view note, it may very slow
          (overlays (paw-get-all-entries-from-overlays))
          (entries (-union entries overlays)) ;; union the overlays from current buffer (online words but not on the same path)
          (entries (-sort (lambda (ex ey)
                            (let ((x (alist-get 'created_at ex))
                                  (y (alist-get 'created_at ey)))
                              (if (and x y)
-                                 (time-less-p (date-to-time x) (date-to-time y))
+                                 (time-less-p (date-to-time y) (date-to-time x))
                                t))) ;; sort by created date
                          entries))
          (default-directory paw-note-dir)
-         (paw-say-word-p nil)) ; it is important for `org-display-inline-images'
+         (paw-say-word-p nil)
+         (org-mode-hook nil)) ; it is important for `org-display-inline-images'
     (when entries
       ;; clear marks
       (paw-clear-marks)
       (pop-to-buffer (get-buffer-create paw-view-note-buffer-name))
       (with-current-buffer (get-buffer-create paw-view-note-buffer-name)
         (let ((inhibit-read-only t))
-          (org-mode)
+          ;; (org-mode)
           (goto-char (point-min))
           (erase-buffer)
           (paw-view-note-mode)
@@ -1062,7 +1171,7 @@ is provided, use PATH instead."
               (insert "\n")))
 
           (setq-local paw-note-origin-path origin-path-at-point)
-          (setq-local paw-view-note-entries entries)
+          (setq-local paw-view-note-entries (delq nil entries))
           (setq-local header-line-format '(:eval (funcall paw-view-notes-header-function)))
 
           ;; goto the word in the *paw-view-note*
@@ -1102,21 +1211,26 @@ is provided, use PATH instead."
 
 ;;;###autoload
 (defun paw-find-notes (&optional entry)
-  "TODO"
+  "Find all notes/overlays in the same origin-path and save it into an org file under `paw-note-dir.'"
   (interactive)
   (let* ((entry-at-point (or entry (get-char-property (point) 'paw-entry)))
          (word (alist-get 'word entry-at-point))
-         (origin-path (alist-get 'origin_path entry-at-point))
+         (origin-path (or (alist-get 'origin_path entry-at-point) buffer-file-truename))
          (origin-path-at-point (alist-get 'origin_path (get-char-property (point) 'paw-entry)))
-         (marked-entries (paw-find-marked-candidates))
-         (entries (or marked-entries (-sort (lambda (ex ey)
-                                              (let ((x (alist-get 'created_at ex))
-                                                    (y (alist-get 'created_at ey)))
-                                                (if (and x y)
-                                                    (time-less-p (date-to-time x) (date-to-time y))
-                                                  t))) ;; sort by created date
-                                            (paw-candidates-by-origin-path origin-path-at-point))))
-         (file (expand-file-name (concat (md5 origin-path) ".org") temporary-file-directory))
+         (marked-entries (if (eq major-mode 'paw-search-mode)
+                             (paw-find-marked-candidates)))
+         (entries (or marked-entries (paw-candidates-by-origin-path origin-path-at-point)))
+         (paw-get-note-during-paw-view-notes t) ;; BE CAREFUL: for UNKNOWN word, we get note during view note, it may very slow
+         (overlays (paw-get-all-entries-from-overlays))
+         (entries (-union entries overlays)) ;; union the overlays from current buffer (online words but not on the same path)
+         (entries (-sort (lambda (ex ey)
+                           (let ((x (alist-get 'created_at ex))
+                                 (y (alist-get 'created_at ey)))
+                             (if (and x y)
+                                 (time-less-p (date-to-time y) (date-to-time x))
+                               t))) ;; sort by created date
+                         entries))
+         (file (file-name-concat paw-note-dir (concat (file-name-base origin-path) ".org")))
          (default-directory paw-note-dir))
 
     ;; delete the fil

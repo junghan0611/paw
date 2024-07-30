@@ -22,6 +22,9 @@ import string
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize, sent_tokenize
+import concurrent.futures
+import re
+from pathlib import Path
 # import cProfile
 # pr = cProfile.Profile()
 
@@ -983,7 +986,13 @@ class DictCsv (object):
 
     # 批量查询
     def query_batch (self, keys):
-        return [ self.query(key) for key in keys ]
+        results = []
+        for key in keys:
+            result = self.query(key)
+            if result is not None:
+                results.append(result)
+        return results
+        # return [ self.query(key) for key in keys ]
 
     # 单词总量
     def count (self):
@@ -1903,15 +1912,257 @@ def process_other_file(file_path):
             words.add(word.lower())
     return words
 
+def iterate_csv_file(file_path):
+    rows = []
+    with open(file_path, 'r') as file:
+        try:
+            dialect = csv.Sniffer().sniff(file.readline(), [',','\t'])
+            reader = csv.reader(file, dialect)
+        except:
+            delimiter = detect_delimiter(file_path)
+            reader = csv.reader(file, delimiter=delimiter)
+        for row in reader:
+            row.append(Path(file_path).stem)  # Add the file path to the row
+            rows.append(row)
+    return rows
+
+def iterate_other_file(file_path):
+    rows = []
+    with open(file_path, 'r') as file:
+        for line in file:
+            row = [line.strip()]  # You might need to adapt this to fit the format of the text file
+            row.append(Path(file_path).stem)  # Add the file path to the row
+            rows.append(row)
+    return rows
+
+
+def search(dictionary, search_type, word_or_sentence, tag, wordlists, known_words_files, oxford, collins, bnc, frq):
+    # test3()
+    # convert_dict("ecdict.db", "ecdict.csv")
+    # sd = open_dict(dictionary)
+    # print(sd.query('kiSs'))
+    # print(sd.query_batch(['give', 'kiss']))
+    # print(sd.match('kisshere', 10, True))
+
+    if search_type == 'WORDLIST':
+        sd = open_dict(dictionary)
+        sentence = word_or_sentence
+        if os.path.exists(sentence):
+            sentence = tools.load_text(sentence)
+        # print(sentence)
+
+        rows = []
+
+        wordlists_paths = None
+        if wordlists != '' and wordlists is not None:
+            wordlists_paths = wordlists.split(',')
+        # print(wordlists_paths)
+
+        if wordlists_paths:
+            # load wordlists one by one
+            for wordlist in wordlists_paths:
+                full_path = os.path.expanduser(wordlist)
+                if os.path.exists(full_path):
+                    _, file_extension = os.path.splitext(full_path)
+                    if file_extension.lower() == '.csv':
+                        rows += iterate_csv_file(full_path)
+                    else:
+                        rows += iterate_other_file(full_path)
+        # print(rows)
+
+        query_word = {}
+        for row in rows:
+            word = row[0] # the first column is the word
+            if sentence == word: # exact match
+                if len(row) > 1:
+                    data = query_word.get(word, None)
+                    if data is None:
+                        query_word[word] = {'word': word, 'definition': "-->" + row[-1] + "\n" + "-->" + word + "\n" + "\n".join(row[1:-1])}
+                    else:
+                        query_word[word] = {'word': word, 'definition': "-->" + row[-1] + "\n" + "-->" + word + "\n" + '\n'.join(row[1:-1]) + "\n\n" + data['definition']}
+                else:
+                    if query_word.get(word, None) is None:
+                        result = sd.query(word)
+                        if result is None:
+                            query_word[word] = {'word': word, 'definition': ''}
+                        else:
+                            query_word[word] = result
+        # fallback and use stardict
+        if query_word == {}:
+            result = sd.query(sentence)
+            if result is None:
+                query_word[word] = {'word': word, 'definition': ''}
+            else:
+                query_word[word] = result
+
+        results = []
+        for word in query_word:
+            results.append(query_word.get(word, None))
+        return results
+
+    elif search_type == 'WORD':
+        sd = open_dict(dictionary)
+        result = sd.query(word_or_sentence)
+        # print(json.dumps(result, indent=4))
+        return [ result ]
+    elif search_type == 'MATCH':
+        sd = open_dict(dictionary)
+        sentence = word_or_sentence
+        if os.path.exists(sentence):
+            sentence = tools.load_text(sentence)
+        # print(sentence)
+
+        rows = []
+
+        wordlists_paths = None
+        if wordlists != '' and wordlists is not None:
+            wordlists_paths = wordlists.split(',')
+        # print(wordlists_paths)
+
+        if wordlists_paths:
+            # load wordlists one by one
+            for wordlist in wordlists_paths:
+                full_path = os.path.expanduser(wordlist)
+                if os.path.exists(full_path):
+                    _, file_extension = os.path.splitext(full_path)
+                    if file_extension.lower() == '.csv':
+                        rows += iterate_csv_file(full_path)
+                    else:
+                        rows += iterate_other_file(full_path)
+        # print(rows)
+
+
+        known_words_files_paths = None
+        if known_words_files != '' and known_words_files is not None:
+            known_words_files_paths = known_words_files.split(',')
+        # print(tag, oxford, collins, bnc, frq, known_words_files_paths)
+
+
+        # get all known words
+        known_words = set()
+        if known_words_files_paths:
+            for file_path in known_words_files_paths:
+                if os.path.exists(file_path):
+                    _, file_extension = os.path.splitext(file_path)
+                    if file_extension.lower() == '.csv':
+                        known_words.update(process_csv_file(file_path))
+                    else:
+                        known_words.update(process_other_file(file_path))
+        # print(known_words)
+
+        query_word = {}
+        for row in rows:
+            word = row[0] # the first column is the word
+            if word not in known_words:
+                # Precise search, but not necessary, because emacs will do the same search on buffer as well
+                # if re.search(r'\b' + word + r'\b', sentence):
+                # print(word)
+                if sentence.find(word) != -1:
+                    if len(row) > 1:
+                        data = query_word.get(word, None)
+                        if data is None:
+                            query_word[word] = {'word': word, 'definition': "-->" + row[-1] + "\n" + "-->" + word + "\n" + "\n".join(row[1:-1])}
+                        else:
+                            query_word[word] = {'word': word, 'definition': "-->" + row[-1] + "\n" + "-->" + word + "\n" + '\n'.join(row[1:-1]) + "\n\n" + data['definition']}
+                    else:
+                        if query_word.get(word, None) is None:
+                            result = sd.query(word)
+                            if result is None:
+                                query_word[word] = {'word': word, 'definition': ''}
+                            else:
+                                query_word[word] = result
+
+        # print(query_word)
+        results = []
+        for word in query_word:
+            results.append(query_word.get(word, None))
+        return results
+
+        # return [ sd.query(word) for word in words if re.search(r'\b' + word + r'\b', sentence) ]
+        # return [ word for row in words for word in row if word in sentence ]
+
+    else:
+        sd = open_dict(dictionary)
+        sentence = word_or_sentence
+        # print(sentence)
+        if os.path.exists(sentence):
+            sentence = tools.load_text(sentence)
+
+        # remove digits
+        sentence = ''.join(c for c in sentence if not c.isdigit())
+
+        # remove punctuation
+        translator = str.maketrans('', '', string.punctuation)
+        sentence = sentence.translate(translator)
+
+        known_words_files_paths = None
+        if known_words_files:
+            known_words_files_paths = known_words_files.split(',')
+        # print(tag, oxford, collins, bnc, frq, known_words_files_paths)
+
+
+        known_words = set()
+        if known_words_files_paths:
+            for file_path in known_words_files_paths:
+                if os.path.exists(file_path):
+                    _, file_extension = os.path.splitext(file_path)
+                    if file_extension.lower() == '.csv':
+                        known_words.update(process_csv_file(file_path))
+                    else:
+                        known_words.update(process_other_file(file_path))
+        # print(known_words)
+
+        # remove stop words
+        stop_words = set(stopwords.words('english'))
+        # stop_words.update(string.punctuation)
+        # Adding known words into stop words
+        stop_words.update(known_words)
+        # remove some special characters
+        stop_words.update(['’', '“', '”', '–', '—'])
+        stop_words.update(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"])
+        sentence = sentence.lower()
+        word_tokens = word_tokenize(sentence)
+        words = [word for word in word_tokens if not word in stop_words]
+        # remove same words
+        words = list(dict.fromkeys(words))
+
+        result = []
+        terms_per_query = 500 # sqlite max depth is 1000
+        max_i = int(len(words) / terms_per_query) + 1
+        for i in range(max_i):
+            start = i * terms_per_query
+            end = (i + 1) * terms_per_query
+            end = min(end, len(words))
+            # pr.enable()
+            if os.path.splitext(dictionary)[-1].lower() in ('.csv', '.txt'):
+                batch_results = sd.query_batch(words[start:end])
+            else:
+                batch_results = sd.query_batch_2(words[start:end], oxford, collins, bnc, frq)
+            # batch_results = sd.query_batch(words[start:end])
+            # pr.disable()
+            # pr.print_stats()
+            batch_results = filter_results_by_tag(batch_results, tag)
+            result += batch_results
+        # print(len(result))
+        # print(json.dumps(result, indent=4))
+        # print(json.dumps(result))
+
+        return result
+        # print(words)
+        # print(json.dumps(sd.query_batch(re.split('[ ,.;!:?]+', sentence))))
+        # batch query
+        # print(json.dumps(sd.query_batch(words)))
+
+
 #----------------------------------------------------------------------
 # testing
 #----------------------------------------------------------------------
 if __name__ == '__main__':
-    db = os.path.abspath(sys.argv[1])
+    dictionaries = os.path.abspath(sys.argv[1])
     my = {'host':'??', 'user':'skywind', 'passwd':'??', 'db':'skywind_t1'}
     def test1():
         t = time.time()
-        sd = StarDict(db, False)
+        sd = StarDict(dictionaries, False)
         print(time.time() - t)
         # sd.delete_all(True)
         print(sd.register('kiss2', {'definition':'kiss me'}, False))
@@ -1980,86 +2231,31 @@ if __name__ == '__main__':
         return 0
     def test5():
         print(tools.validate_word('Hello World', False))
-    # test3()
-    # convert_dict("ecdict.db", "ecdict.csv")
-    sd = StarDict(db, False)
-    # print(sd.query('kiSs'))
-    # print(sd.query_batch(['give', 'kiss']))
-    # print(sd.match('kisshere', 10, True))
 
+    dictionaries_paths = dictionaries.split(',')
     search_type = sys.argv[2]
-    if search_type == 'WORD':
-        word = sys.argv[3]
-        result = sd.query(word)
-        print(json.dumps(result, indent=4))
-    else:
-        sentence = sys.argv[3]
-        # print(sentence)
-        if os.path.exists(sentence):
-            sentence = tools.load_text(sentence)
+    word_or_sentence = sys.argv[3]
+    tag = sys.argv[4] if len(sys.argv) > 5 else ""
+    wordlists = sys.argv[5] if len(sys.argv) > 5 else None
+    known_words_files = sys.argv[6] if len(sys.argv) > 6 else None
+    oxford = sys.argv[7] if len(sys.argv) > 7 else None
+    collins = sys.argv[8] if len(sys.argv) > 8 else None
+    bnc = sys.argv[9] if len(sys.argv) > 9 else None
+    frq = sys.argv[10] if len(sys.argv) > 10 else None
 
-        # remove digits
-        sentence = ''.join(c for c in sentence if not c.isdigit())
+    # search mutiple dictionaries and concat the results
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(dictionaries_paths)) as executor:
+        # Start the load operations and mark each future with its dictionary
+        future_to_dictionary = {executor.submit(search, dictionary, search_type, word_or_sentence, tag, wordlists, known_words_files, oxford, collins, bnc, frq): dictionary for dictionary in dictionaries_paths}
+        data = []
+        for future in concurrent.futures.as_completed(future_to_dictionary):
+            dictionary = future_to_dictionary[future]
+            try:
+                data += future.result()
+            except Exception as exc:
+                print('%r generated an exception: %s' % (dictionary, exc))
+            # else:
+            #     print('%r search error' % (dictionary))
 
-        # remove punctuation
-        translator = str.maketrans('', '', string.punctuation)
-        sentence = sentence.translate(translator)
-
-        tag = sys.argv[4]
-        oxford = sys.argv[5]
-        collins = sys.argv[6]
-        bnc = sys.argv[7]
-        frq = sys.argv[8]
-        file_paths = sys.argv[9].split(',') if len(sys.argv) > 9 else None
-        # print(tag, oxford, collins, bnc, frq, file_paths)
-
-
-        # print(file_paths)
-        known_words = set()
-        if file_paths:
-            for file_path in file_paths:
-                if os.path.exists(file_path):
-                    _, file_extension = os.path.splitext(file_path)
-                    if file_extension.lower() == '.csv':
-                        known_words.update(process_csv_file(file_path))
-                    else:
-                        known_words.update(process_other_file(file_path))
-        # print(known_words)
-
-        # remove stop words
-        stop_words = set(stopwords.words('english'))
-        # stop_words.update(string.punctuation)
-        # Adding known words into stop words
-        stop_words.update(known_words)
-        # remove some special characters
-        stop_words.update(['’', '“', '”', '–', '—'])
-        stop_words.update(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"])
-        sentence = sentence.lower()
-        word_tokens = word_tokenize(sentence)
-        words = [word for word in word_tokens if not word in stop_words]
-        # remove same words
-        words = list(dict.fromkeys(words))
-        # print(words)
-
-        result = []
-        terms_per_query = 500 # sqlite max depth is 1000
-        max_i = int(len(words) / terms_per_query) + 1
-        for i in range(max_i):
-            start = i * terms_per_query
-            end = (i + 1) * terms_per_query
-            end = min(end, len(words))
-            # pr.enable()
-            batch_results = sd.query_batch_2(words[start:end], oxford, collins, bnc, frq)
-            # batch_results = sd.query_batch(words[start:end])
-            # pr.disable()
-            # pr.print_stats()
-            batch_results = filter_results_by_tag(batch_results, tag)
-            result += batch_results
-        # print(len(result))
-        print(json.dumps(result, indent=4))
-        # print(json.dumps(result))
-
-        # print(words)
-        # print(json.dumps(sd.query_batch(re.split('[ ,.;!:?]+', sentence))))
-        # batch query
-        # print(json.dumps(sd.query_batch(words)))
+        # print(data)
+        print(json.dumps(data, indent=4))

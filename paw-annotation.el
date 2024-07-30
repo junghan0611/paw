@@ -8,6 +8,7 @@
 (require 'paw-gptel)
 (require 'paw-request)
 (require 'paw-focus)
+(require 'paw-search)
 
 (require 'org)
 (require 's)
@@ -16,35 +17,11 @@
 (require 'thingatpt)
 (require 'evil-core nil t)
 
-(defconst paw-note-type-alist
-  '((word . "✎")
-    (highlight-1 . paw-highlight-1-face)
-    (highlight-2 . paw-highlight-2-face)
-    (highlight-3 . paw-highlight-3-face)
-    (highlight-4 . paw-highlight-4-face)
-    (attachment . "📝")
-    (question . "❓")
-    (image . "📷")
-    (bookmark . "🔖")
-    (todo . "☐")
-    (done . "☑")
-    (cancel . "☒")
-    (link . "🔗")
-    (sdcv . "✎"))
-  "Const annotation types and their characters or faces.")
-
 (defcustom paw-annotation-mode-supported-modes
-  '(nov-mode org-mode paw-view-note-mode wallabag-entry-mode eww-mode)
+  '(nov-mode org-mode paw-view-note-mode wallabag-entry-mode eww-mode eaf-mode)
   "Supported modes for paw-annotation-mode."
   :group 'paw
   :type 'list)
-
-(defcustom paw-annotation-search-paths '()
-  "Alternative pathes for paw-annotation-mode. The books pathes
- that are possibly used for paw-annotation-mode."
-  :group 'paw
-  :type 'list)
-
 
 (defvar paw-annotation-current-highlight-type (assoc 'highlight-1 paw-note-type-alist))
 
@@ -73,7 +50,7 @@
     (define-key map "N" 'paw-previous-annotation)
     (define-key map "p" 'paw-previous-annotation) ;; may impact edit mode
     (define-key map "y" 'paw-copy-annotation)
-    (define-key map "r" 'paw-replay)
+    (define-key map "r" 'paw-view-note-play)
     (define-key map "s" 'paw-view-note-in-minibuffer)
     (define-key map "i" 'paw-find-note)
     (define-key map "&" 'paw-find-note)
@@ -267,17 +244,9 @@ Argument EVENT mouse event."
              ('eaf-mode nil)
              ('paw-search-mode nil)
              (_ (paw-add-annotation-overlay (car candidates))))))
-      ;; push to paw-search-entries and paw-full-entries, so that we donot need to refresh the database
-      ;; only if paw-full-entries is not nil, we use push
-      ;; since if paw-full-entries is nil, it maybe the first time to load
-      (if paw-full-entries
-          (progn
-            (push (car candidates) paw-search-entries)
-            (push (car candidates) paw-full-entries)
-            ;; update *paw* buffer
-            (if (buffer-live-p (get-buffer "*paw*"))
-                (paw t)))
-        (paw t)))
+      ;; update *paw* buffer
+      (if (buffer-live-p (get-buffer "*paw*"))
+          (paw t)))
 
     ;; enable paw annotation mode after adding
     (unless paw-annotation-mode
@@ -443,7 +412,7 @@ Argument EVENT mouse event."
             (browse-url link))
            ("annotation"
             (paw-find-origin
-             (cl-find-if (lambda (x) (equal link (alist-get 'word x))) paw-full-entries)))))))))
+             (cl-find-if (lambda (x) (equal link (alist-get 'word x))) paw-search-entries)))))))))
 
 ;;;###autoload
 (defun paw-add-attachment (&optional word)
@@ -489,14 +458,16 @@ Argument EVENT mouse event."
   "when candidates, just check and show the candidates overlays, this is much faster"
   (interactive)
   (if (or candidates paw-annotation-mode)
-      (let ((candidates (if candidates candidates (paw-candidates-by-origin-path-serverp) )))
-        (save-excursion
-          (cl-loop for entry in candidates do
-                   (pcase (car (alist-get 'note_type entry))
-                     ('attachment)
-                     ('bookmark)
-                     ('image)
-                     (_ (paw-add-annotation-overlay entry))))))))
+      (if (eq major-mode 'eaf-mode)
+          (eaf-call-async "execute_function_with_args" eaf--buffer-id "paw_annotation_mode" `,paw-db-file)
+        (let ((candidates (if candidates candidates (paw-candidates-by-origin-path-serverp) )))
+          (save-excursion
+            (cl-loop for entry in candidates do
+                     (pcase (car (alist-get 'note_type entry))
+                       ('attachment)
+                       ('bookmark)
+                       ('image)
+                       (_ (paw-add-annotation-overlay entry)))))) )))
 
 (defun paw-get-highlight-type ()
   (interactive)
@@ -677,12 +648,21 @@ Argument EVENT mouse event."
             ;; if location is nil, that means it is not in current buffer, hightlight all occurrences in the buffer
             ((or (paw-online-p serverp) (eq location nil))
              (goto-char (point-min))
-             (let ((case-fold-search t))  ; or nil for case-sensitive
+             (let ((case-fold-search t)
+                   (cur-loc)
+                   (last-loc))  ; or nil for case-sensitive
                (while (if (string-match-p "[[:ascii:]]+" real-word)
                           ;; english
-                          (re-search-forward (concat "\\b" real-word "\\b") nil t)
+                          (progn
+                            (setq cur-loc (re-search-forward (concat "\\b" real-word "\\b") nil t))
+                            (if (eq cur-loc last-loc)
+                                nil ;; if always the same, quit the while to avoid forever loop
+                              (setq last-loc cur-loc)))
                         ;; non-english
-                        (re-search-forward real-word nil t))
+                        (setq cur-loc (re-search-forward real-word nil t))
+                        (if (eq cur-loc last-loc)
+                            nil ;; if always the same, quit the while to avoid forever loop
+                          (setq last-loc cur-loc)))
                  (let* ((beg (match-beginning 0))
                         (end (match-end 0))
 	                (existing-overlays (overlays-in beg end)))
@@ -728,6 +708,8 @@ Argument EVENT mouse event."
 
 
 (defun paw-previous-annotation ()
+  "Go to the previous annotation, if run it in *paw-view-note* buffer,
+it will go to the previous annotation and view it."
   (interactive)
   (cond ((eq major-mode 'paw-search-mode)
          (progn
@@ -735,6 +717,20 @@ Argument EVENT mouse event."
            (paw-find-origin)))
         ((bound-and-true-p focus-mode)
          (paw-focus-find-prev-thing-segment))
+        ((eq major-mode 'paw-view-note-mode)
+         (if (buffer-live-p paw-note-target-buffer)
+             (let ((window (get-buffer-window paw-note-target-buffer)))
+               (if (window-live-p window)
+                   (progn
+                     (with-selected-window (select-window window)
+                       (call-interactively 'paw-previous-annotation))
+                     (recenter)
+                     (call-interactively  'paw-view-note) )
+                 (switch-to-buffer-other-window paw-note-target-buffer)
+                 (call-interactively 'paw-previous-annotation)
+                 (recenter)
+                 (call-interactively  'paw-view-note)))
+           (message "The original buffer is already closed.")))
         (t (let* ((previous-overlays (reverse (-filter
                                                (lambda (o)
                                                  (overlay-get o 'paw-entry))
@@ -755,6 +751,8 @@ Argument EVENT mouse event."
 
 
 (defun paw-next-annotation ()
+  "Go to the next annotation, if run it in *paw-view-note* buffer,
+it will go to the next annotation and view it."
   (interactive)
   (cond ((eq major-mode 'paw-search-mode)
          (progn
@@ -762,6 +760,20 @@ Argument EVENT mouse event."
            (paw-find-origin)) )
         ((bound-and-true-p focus-mode)
          (paw-focus-find-next-thing-segment))
+        ((eq major-mode 'paw-view-note-mode)
+         (if (buffer-live-p paw-note-target-buffer)
+             (let ((window (get-buffer-window paw-note-target-buffer)))
+               (if (window-live-p window)
+                   (progn
+                     (with-selected-window (select-window window)
+                       (call-interactively 'paw-next-annotation))
+                     (recenter)
+                     (call-interactively  'paw-view-note))
+                 (switch-to-buffer-other-window paw-note-target-buffer)
+                 (call-interactively 'paw-next-annotation)
+                 (recenter)
+                 (call-interactively  'paw-view-note)))
+           (message "The original buffer is already closed.")))
         (t (let* ((overlay (cl-find-if
                             (lambda (o)
                               (overlay-get o 'paw-entry))
@@ -810,12 +822,48 @@ Argument EVENT mouse event."
      (overlay-get o 'paw-entry))
    (overlays-in (point-min) (point-max))))
 
+(defvar paw-get-note-during-paw-view-notes nil)
+
+(defvar paw-get-note-limit-during-paw-view-notes 200
+  "The limit of getting note during paw-view-notes for unknown
+words. If more than it, it will not get note. If the buffer has
+too many unknown words, the process of getting note for each word
+will be very slow, make a resonable limit is a workaround.
+
+Only when the note is empty, it will get note for unknown words.
+That means if the note is not empty (already set by last time),
+it will not get note for unknown words.
+
+100 words ~ 1 second on my laptop.
+
+For example, if a buffer has 200 words. The first time we run
+`paw-view-notes', the notes of first 100 words will be updated.
+The second time we run `paw-view-notes', the notes of last 100
+words will be updated.")
+
 (defun paw-get-all-entries-from-overlays()
-  (cl-remove-duplicates
-   (mapcar
-    (lambda (o)
-      (overlay-get o 'paw-entry))
-    (overlays-in (point-min) (point-max))) ))
+  (let ((overlays (overlays-in (point-min) (point-max)))
+        (counter 0))
+    (cl-remove-duplicates
+     (mapcar
+      (lambda (o)
+        (let ((entry (overlay-get o 'paw-entry)))
+          (if (and entry paw-get-note-during-paw-view-notes)
+              ;; only unknown words
+              (when (eq (alist-get 'serverp entry) 3)
+                ;; if note is not empty, that means it already had note
+                (when (string= (alist-get 'note entry) "")
+                  (setq counter (1+ counter))
+                  (when (<= counter paw-get-note-limit-during-paw-view-notes)
+                      ;; (message "%s \n" counter)
+                      (setf (alist-get 'note entry)
+                            (save-excursion
+                              (goto-char (overlay-start o))
+                              (paw-get-note)))
+                      (setf (alist-get 'origin_point entry) (overlay-end o))
+                      ))))
+          entry))
+      overlays))))
 
 (defun paw-list-default-action (x)
     (let* ((entry (get-text-property 0 'paw-entry x))
@@ -961,9 +1009,7 @@ Argument EVENT mouse event."
     ;; TODO: update the overlays, same as `paw-add-online-word-callback'
     ;; query back the candidate from database
     (setq entry (car (paw-candidate-by-word word) ))
-    (if (eq major-mode 'paw-search-mode)
-        (paw-search-refresh)
-      (paw-search-refresh t))
+    (paw-search-refresh)
     ;; in all buffers with paw-annotation-mode, clear
     ;; all overlays of this word, if any, if we update
     ;; the word, we should delete the old overlay
@@ -1002,9 +1048,7 @@ Argument EVENT mouse event."
     ;; TODO: update the overlays, same as `paw-add-online-word-callback'
     ;; query back the candidate from database
     (setq entry (car (paw-candidate-by-word word) ))
-    (if (eq major-mode 'paw-search-mode)
-        (paw-search-refresh)
-      (paw-search-refresh t))
+    (paw-search-refresh)
     ;; in all buffers with paw-annotation-mode, clear
     ;; all overlays of this word, if any, if we update
     ;; the word, we should delete the old overlay
@@ -1199,8 +1243,9 @@ If WHOLE-FILE is t, always index the whole file."
       (kbd "u") 'paw-scroll-down
       (kbd "d") 'paw-scroll-up
       (kbd "c") 'paw-view-note-current-thing
-      (kbd "n") 'paw-view-note-next-thing
-      (kbd "p") 'paw-view-note-prev-thing
+      (kbd "n") 'paw-next-annotation
+      (kbd "N") 'paw-previous-annotation
+      (kbd "p") 'paw-previous-annotation
       (kbd "f") 'focus-mode
       (kbd "r") 'paw-view-note-play
       [mouse-1] 'paw-view-note-click
@@ -1356,6 +1401,11 @@ thing."
   :type 'boolean)
 
 
+(defcustom paw-annotation-show-wordlists-words-p nil
+  "Set t to show wordlists words in paw-annotation-mode."
+  :group 'paw
+  :type 'boolean)
+
 (defcustom paw-annotation-show-unknown-words-p nil
   "Set t to show unknown words in paw-annotation-mode."
   :group 'paw
@@ -1382,33 +1432,45 @@ is t."
       (setq-local minor-mode-map-alist
                   (cons (cons 'paw-annotation-mode paw-annotation-mode-map)
                         minor-mode-map-alist))
-      ;; show all annotations first
-      (paw-show-all-annotations)
 
-      ;; show all unknown words
-      (if paw-annotation-show-unknown-words-p
-          (paw-focus-find-unknown-words))
+      (if (eq major-mode 'eaf-mode)
+          (eaf-call-async "execute_function_with_args" eaf--buffer-id "paw_annotation_mode" `,paw-db-file)
 
-      ;; then update and show the mode line
-      (paw-annotation-get-mode-line-text)
-      (if (symbolp (car-safe mode-line-format))
-          (setq mode-line-format (list mode-line-segment mode-line-format))
-        (push mode-line-segment mode-line-format))
-      (when paw-annotation-read-only-enable
-        ;; Save the original read-only state of the buffer
-        (setq paw-annotation-read-only buffer-read-only)
-        (read-only-mode 1))
+        ;; show all annotations first
+        (paw-show-all-annotations)
+
+        ;; show all words from wordlists
+        (if paw-annotation-show-wordlists-words-p
+            (paw-focus-find-words :wordlist t) )
+
+        ;; show all unknown words
+        (if paw-annotation-show-unknown-words-p
+            (paw-focus-find-words))
+
+        ;; then update and show the mode line
+        (paw-annotation-get-mode-line-text)
+        (if (symbolp (car-safe mode-line-format))
+            (setq mode-line-format (list mode-line-segment mode-line-format))
+          (push mode-line-segment mode-line-format))
+        (unless (eq major-mode 'nov-mode)
+          (when paw-annotation-read-only-enable
+            ;; Save the original read-only state of the buffer
+            (setq paw-annotation-read-only buffer-read-only)
+            (read-only-mode 1)) ))
       (run-hooks 'paw-annotation-mode-hook))
      (t
       (setq-local minor-mode-map-alist
                   (assq-delete-all 'paw-annotation-mode minor-mode-map-alist))
       (setq mode-line-format (delete mode-line-segment mode-line-format))
-      (when paw-annotation-read-only-enable
-        ;; Restore the original read-only state of the buffer
-        (setq buffer-read-only paw-annotation-read-only))
-      (if paw-click-overlay
-          (delete-overlay paw-click-overlay))
-      (paw-clear-annotation-overlay)))))
+      (if (eq major-mode 'eaf-mode)
+          (eaf-call-async "eval_function" eaf--buffer-id "paw_annotation_mode_disable" (key-description (this-command-keys-vector)))
+        (unless (eq major-mode 'nov-mode)
+          (when paw-annotation-read-only-enable
+            ;; Restore the original read-only state of the buffer
+            (setq buffer-read-only paw-annotation-read-only)) )
+        (if paw-click-overlay
+            (delete-overlay paw-click-overlay))
+        (paw-clear-annotation-overlay) )))))
 
 (defvar paw-annotation--menu-contents
   '("Paw Annotation"
@@ -1452,7 +1514,7 @@ is t."
     ["Follow link" paw-follow-link
      :help "Follow the link"
      :enable paw-annotation-mode]
-    ["Replay audio" paw-replay
+    ["Replay audio" paw-view-note-play
      :help "Replay the audio"
      :enable paw-annotation-mode]
     "---"
@@ -1538,84 +1600,6 @@ is t."
                          ((= number-of-notes 1) (propertize (format " 1 (%d) note " no-of-overlays) 'face 'paw-notes-exist-face))
                          (t (propertize (format " %d (%d) notes " number-of-notes no-of-overlays) 'face 'paw-notes-exist-face))))) )))
 
-;;; format
-(defun paw-format-content (note-type word content content-path content-filename)
-  (pcase (car note-type)
-    ('attachment
-     (s-pad-right 30 " "
-                  (let* ((ext (downcase (file-name-extension content-path)))
-                         (ext (if (string= ext "jpg") "jpeg" ext)))
-                    (pcase ext
-                      ((or "pbm" "xbm" "xpm" "gif" "jpeg" "tiff" "png" "svg" "jpg")
-                       (propertize "IMAGS"
-                                   'face 'paw-offline-face
-                                   'display (create-image (expand-file-name content-path paw-note-dir) nil nil :width (if (eq system-type 'gnu/linux) 200 100) :height nil  :margin '(0 . 1))))
-                      (_ (propertize (format "%s %s" (paw-attach-icon-for (expand-file-name content-filename)) (paw-format-column content-filename 40 :left) )
-                                     'face 'paw-offline-face))) ) ))
-    ('image
-     (s-pad-right 30 " "
-                  (propertize "IMAGS"
-                              'face 'paw-offline-face
-                              'display (create-image (expand-file-name content-path paw-note-dir) nil nil :width (if (eq system-type 'gnu/linux) 200 100) :height nil :margin '(0 . 1))) ))
-    (_ (s-pad-right 40 " "
-                    (propertize (s-truncate 36 (s-collapse-whitespace (or (if (equal content 0) word (if content content "")) (paw-get-real-word word))))
-                                'face 'paw-offline-face)))))
-
-(defun paw-format-icon (note-type content serverp)
-  "Return the icon based on NOTE-TYPE and CONTENT.
-CONTENT is useful for sub types, for example, link."
-  (pcase (car note-type)
-    ('word
-     (propertize (cdr note-type) 'display (if (paw-online-p serverp)
-                                              paw-star-face-icon
-                                              paw-word-icon)))
-    ('image
-     (propertize (cdr note-type) 'display paw-image-icon))
-    ('bookmark
-     (propertize (cdr note-type) 'display paw-bookmark-icon))
-    ('attachment
-     (propertize (cdr note-type) 'display paw-attachment-icon))
-    ('question
-     (propertize (cdr note-type) 'display paw-question-icon))
-    ('link
-     (let* ((json (condition-case nil
-                      (let ((output (json-read-from-string content)))
-                        (if (and (not (eq output nil))
-                                 (not (arrayp output))
-                                 (not (numberp output)))
-                            output
-                          nil))
-                    (error nil)))
-            (type (or (alist-get 'type json) ""))
-            (link (or (alist-get 'link json) "")))
-       (pcase type
-         ("file"
-          (propertize (cdr note-type) 'display paw-file-link-icon))
-         ("url"
-          (propertize (cdr note-type) 'display paw-url-link-icon))
-         ("annotation"
-          (propertize (cdr note-type) 'display paw-annotation-link-icon))
-         ("org"
-          (propertize (cdr note-type) 'display (create-image paw-org-link-file nil nil :width nil :height nil :ascent 'center))))))
-    ('todo
-     (propertize (cdr note-type) 'display paw-todo-icon))
-    ('done
-     (propertize (cdr note-type) 'display paw-done-icon))
-    ('cancel
-     (propertize (cdr note-type) 'display paw-cancel-icon))
-    ('highlight-1
-     (propertize "  " 'face (cdr note-type)))
-    ('highlight-2
-     (propertize "  " 'face (cdr note-type)))
-    ('highlight-3
-     (propertize "  " 'face (cdr note-type)))
-    ('highlight-4
-     (propertize "  " 'face (cdr note-type)))
-    ('highlight
-     (propertize "HL" 'face (cdr note-type)))
-    ('stamp
-     (propertize (cdr note-type) 'display (cdr note-type)))
-    (_ " ")))
 
 (defun paw-add-overlay (beg end note-type note entry)
   "Add overlay between BEG and END based on NOTE-TYPE.
