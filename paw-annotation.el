@@ -17,6 +17,8 @@
 (require 'thingatpt)
 (require 'evil-core nil t)
 
+(declare-function evil-define-key* "ext:evil-core.el" t t)
+
 (defcustom paw-annotation-mode-supported-modes
   '(nov-mode org-mode paw-view-note-mode wallabag-entry-mode eww-mode eaf-mode)
   "Supported modes for paw-annotation-mode."
@@ -104,6 +106,11 @@ Argument EVENT mouse event."
       (goto-char pos)
       (paw-view-note))))
 
+(defcustom paw-cache-dir
+  (expand-file-name (concat user-emacs-directory ".cache/paw"))
+  "paw cache directory."
+  :group 'paw
+  :type 'directory)
 
 
 (defun paw-add-general (word type location &optional gptel note path)
@@ -236,6 +243,7 @@ Argument EVENT mouse event."
         ((or 'attachment 'image)
          (paw-find-note (car candidates)))
         ('bookmark
+         (paw-download-ico (paw-get-origin-path))
          (message (format "Added bookmark: %s -> %s" (paw-get-origin-path) location)))
         ('sdcv
          (message (format "Added sdcv: %s" word)))
@@ -253,6 +261,67 @@ Argument EVENT mouse event."
       (paw-annotation-mode 1))
 
     ))
+
+(defun paw-download-ico (&optional location)
+  "Download ico file from location."
+  (interactive)
+  (let* ((location (or location (alist-get 'origin_path (paw-find-candidate-at-point))) )
+         (location (let* ((url (url-generic-parse-url location))
+                     (https (url-type url))
+                     (host (url-host url)))
+                (concat https "://" host)))
+         (ico-file-hash (md5 location))
+         (icon-file-path (concat (expand-file-name ico-file-hash paw-cache-dir) ".ico"))
+         (output-icon-file-path (concat (expand-file-name ico-file-hash paw-cache-dir) ".png")))
+    (when (string-match-p "http" location)
+      (unless (file-exists-p output-icon-file-path)
+        (message "Downloading ico file from %s" location)
+        (request location
+          :parser 'buffer-string
+          :headers `(("User-Agent" . "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36")
+                     ("Content-Type" . "application/xml"))
+          :timeout 5
+          :success (cl-function
+                    (lambda (&key data &allow-other-keys)
+                      (when-let* ((parsed-html (with-temp-buffer
+                                                 (insert data)
+                                                 (libxml-parse-html-region (point-min) (point-max))))
+                                  (icons (dom-elements parsed-html 'rel "icon"))
+                                  (icon (dom-attr icons 'href))
+                                  (icon (if (string-match-p "https" icon)
+                                            icon
+                                          (let* ((url (url-generic-parse-url location))
+                                                 (https (url-type url))
+                                                 (host (url-host url)))
+                                            (concat https "://" host icon)))))
+                        (message "Found ico: %s" icon)
+                        (make-directory paw-cache-dir t)
+                        (set-process-sentinel
+                         (start-process
+                          (executable-find "curl")
+                          "*paw-favicon-downloder*"
+                          (executable-find "curl")
+                          "-L"
+                          "--user-agent"
+                          "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36"
+                          icon
+                          "--output"
+                          icon-file-path)
+                         (lambda (process event)
+                           (when (string= event "finished\n")
+                             (call-process-shell-command (format "convert %s -thumbnail 16x16 -alpha on -background none -flatten %s" icon-file-path output-icon-file-path) nil 0)
+                             (message "Download ico to %s" output-icon-file-path)
+                             (paw-search-refresh)))))))
+          :error
+          (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
+                         (message "%s" error-thrown))))))))
+
+(defun paw-download-all-icos()
+  "Download all ico files. Be careful, it will try to download all
+icos of all links (`paw-list-all-links') in database."
+  (interactive)
+  (cl-loop for entry in (paw-candidates-only-links) do
+           (paw-download-ico (alist-get 'origin_path entry) )))
 
 (defun paw-image-content-json (image)
   (if (file-exists-p image)
@@ -937,11 +1006,11 @@ words will be updated.")
 
 ;;;###autoload
 (defun paw-list-all-links ()
-  "List all eaf/eww links in the buffer."
+  "List all eaf/eww links."
   (interactive)
   (consult--read (paw-candidates-format nil nil nil nil t)
-                 :prompt "All Links: "
-                 :sort t
+                 :prompt "URL: "
+                 :sort nil
                  :history 'paw-list-add-links-history
                  :lookup (lambda(cand candidates input-string _)
                            (paw-list-default-action
@@ -1176,7 +1245,7 @@ If WHOLE-FILE is t, always index the whole file."
              (note-type (alist-get 'note_type entry)))
         (concat
          (paw-format-column
-          (paw-format-icon note-type content serverp)
+          (paw-format-icon note-type content serverp origin-path)
           2 :left)
          "  "
          (propertize (s-truncate 55 (paw-get-real-word word) ) 'face 'paw-offline-face)
@@ -1234,8 +1303,8 @@ If WHOLE-FILE is t, always index the whole file."
   "Keymap for function `paw-annotation-mode'.")
 
 
-(if (fboundp 'evil-define-key)
-    (evil-define-key '(normal visual insert) paw-annotation-mode-map
+(if (bound-and-true-p evil-mode)
+    (evil-define-key* '(normal visual insert) paw-annotation-mode-map
       (kbd "s") 'paw-view-note-in-minibuffer
       (kbd "t") 'paw-view-note-transalate
       ;; (kbd "i") 'paw-add-highlight
@@ -1585,20 +1654,11 @@ is t."
     paw-annotation-mode-line-text))
 
 (defun paw-annotation-get-mode-line-text ()
-  (let* ((candidate-cons (paw-candidates-by-mode nil nil))
-         (number-of-notes (or (length (car candidate-cons)) 0))
-         (number-of-all-notes (or (cdr candidate-cons) 0))
-         (no-of-overlays (length (paw-get-all-entries-from-overlays) )))
+  (let* ((number-of-notes (paw-candidates-by-origin-path-length)))
     (setq-local paw-annotation-mode-line-text
-                (pcase major-mode
-                  ('nov-mode
-                   (cond ((= number-of-notes 0) (propertize (format " 0/%d (%d) notes " number-of-all-notes no-of-overlays) 'face 'paw-no-notes-exist-face))
-                         ((= number-of-notes 1) (propertize (format " 1/%d (%d) note " number-of-all-notes no-of-overlays) 'face 'paw-notes-exist-face))
-                         (t (propertize (format " %d/%d (%d) notes " number-of-notes number-of-all-notes no-of-overlays) 'face 'paw-notes-exist-face))))
-                  (_
-                   (cond ((= number-of-notes 0) (propertize (format " 0 (%d) notes " no-of-overlays) 'face 'paw-no-notes-exist-face))
-                         ((= number-of-notes 1) (propertize (format " 1 (%d) note " no-of-overlays) 'face 'paw-notes-exist-face))
-                         (t (propertize (format " %d (%d) notes " number-of-notes no-of-overlays) 'face 'paw-notes-exist-face))))) )))
+                (cond ((= number-of-notes 0) (propertize (format " 0 notes " number-of-notes) 'face 'paw-no-notes-exist-face))
+                      ((= number-of-notes 1) (propertize (format " 1 note " number-of-notes) 'face 'paw-notes-exist-face))
+                      (t (propertize (format " %d notes " number-of-notes) 'face 'paw-notes-exist-face))) )))
 
 
 (defun paw-add-overlay (beg end note-type note entry)

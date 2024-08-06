@@ -377,6 +377,19 @@ serverp:
         :where (or (= origin_path ,(or path origin-path))
                    (in origin_path ,search-pathes))]))))
 
+(defun paw-candidates-by-origin-path-length (&optional path)
+  (caar (let* ((origin-path (paw-get-origin-path))
+                (search-pathes (vconcat (-map (lambda (dir)
+                                                (concat dir (file-name-nondirectory origin-path))) ;; no need to expand, otherwise, the string will be different and can not match in sql
+                                              paw-annotation-search-paths))))
+           (paw-db-sql
+            `[:select (funcall count word) :from
+              [:select [items:word status:origin_path] :from items
+               :inner :join status
+               :on (= items:word status:word)]
+              :where (or (= origin_path ,(or path origin-path))
+                         (in origin_path ,search-pathes))]))))
+
 (defun paw-candidates-by-origin-path-serverp (&optional random-p)
   (mapcar
    (lambda(x)
@@ -485,12 +498,11 @@ serverp:
       [:select [items:word items:exp status:content status:serverp status:note status:note_type status:origin_type status:origin_path status:origin_id status:origin_point status:created_at] :from items
        :inner :join status
        :on (= items:word status:word)]
-      :where (or (= origin_type 'eaf-mode)
-                 (= origin_type "browser")
-                 (= origin_type "pdf-viewer")
-                 (= origin_type 'eww-mode))])))
-
-
+      :where (and (or (= origin_type 'eaf-mode)
+                      (= origin_type "browser")
+                      (= origin_type 'eww-mode))
+                   (= note_type '(bookmark . "🔖")))
+      :order-by created_at :desc])))
 
 
 (defun paw-delete-all-online-words()
