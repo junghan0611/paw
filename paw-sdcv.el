@@ -117,14 +117,17 @@ Result is parsed as json."
                                     (car arguments ))
                    :filter filter
                    :sentinel (lambda (proc event)
-                               (paw-sdcv-process-sentinel proc event buffer)))))
+			       (paw-sdcv-process-sentinel proc event buffer)))))
     (setq paw-sdcv-running-process process)
     (set-process-query-on-exit-flag process nil)))
 
 (defun paw-sdcv-format-result (result)
   "Return a formatted string for RESULT."
-  (let-alist result
-    (format "-->%s\n-->%s%s\n" .dict .word .definition)))
+  (if (string= paw-view-note-meaning-src-lang "org")
+      (let-alist result
+	(format "%s\n" .definition))
+    (let-alist result
+      (format "-->%s\n-->%s%s\n" .dict .word .definition))))
 
 
 (defun paw-sdcv-process-filter (proc string)
@@ -162,15 +165,18 @@ Result is parsed as json."
                   (org-mark-subtree)
                   (forward-line)
                   (delete-region (region-beginning) (region-end))
-                  (paw-insert-and-make-overlay "#+BEGIN_SRC sdcv\n" 'invisible t)
-                  (insert (format "%s" result))
-                  (paw-insert-and-make-overlay "#+END_SRC" 'invisible t)
+		  (if (string= paw-view-note-meaning-src-lang "org")
+                      (paw-insert-and-make-overlay (format "%s" result) 'face `(:background ,paw-view-note-background-color :extend t))
+		    (progn
+		      (paw-insert-and-make-overlay "#+BEGIN_SRC sdcv\n" 'invisible t)
+		      (insert (format "%s" result))
+		      (paw-insert-and-make-overlay "#+END_SRC" 'invisible t)))
                   (insert "\n")
-                  (goto-char (point-min))
-                  (unless (search-forward "** Dictionaries" nil t)
-                    (search-forward "** Translation" nil t))
-                  (beginning-of-line)
-                  (recenter 0)
+                  ;; (goto-char (point-min))
+                  ;; (unless (search-forward "** Dictionaries" nil t)
+                  ;;   (search-forward "** Translation" nil t))
+                  ;; (beginning-of-line)
+                  ;; (recenter 0)
                   ;; (message "Translation completed %s" translation)
                   ))
               (deactivate-mark)
@@ -180,6 +186,11 @@ Result is parsed as json."
   ;; TODO back to original window, but unsafe
   ;; (other-window 1)
   )
+
+(defcustom paw-view-note-meaning-src-lang "sdcv"
+  "Language to be used for highlighting sdcv ouput in meaning section of paw-view-note buffer."
+  :group 'paw
+  :type 'string)
 
 (defun paw-update-all-word ()
   (interactive)

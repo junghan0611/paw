@@ -44,7 +44,7 @@
         (paw-view-note entry)
       (paw-view-note (paw-new-entry word) :no-pushp t :buffer-name paw-view-note-sub-buffer-name))))
 
-(defcustom paw-org-protocol-display-function 'pop-to-buffer
+(defcustom paw-org-protocol-display-function 'switch-to-buffer
   "The function to display the note buffer."
   :type 'function
   :group 'paw)
@@ -55,18 +55,23 @@
          (title (plist-get data :title))
          (word (plist-get data :body))
          (entry (or (car (paw-candidate-by-word word))
-                    (car (paw-candidate-by-word (downcase word))))))
-    (paw-view-note (or entry (paw-new-entry word
+                    (car (paw-candidate-by-word (downcase word)))))
+         (entry (if entry (append `((context . ,note)) entry) nil))
+         (paw-note-target-buffer (get-buffer paw-view-note-buffer-name)))
+    (if (and (string-empty-p word)
+             (string-empty-p note))
+        (message url)
+      (paw-view-note (or entry (paw-new-entry word
                                             :origin_type "browser"
                                             :serverp 3
                                             :content (json-encode data)
                                             :origin_path url
                                             :origin_point title
                                             :lang (paw-check-language word)
-                                            :note note ) )
+                                            :context note ) )
                    ;; :buffer-name (format "*Paw: %s*" title)
                    :buffer-name paw-view-note-buffer-name
-                   :display-func paw-org-protocol-display-function)
+                   :display-func paw-org-protocol-display-function) )
     nil))
 
 

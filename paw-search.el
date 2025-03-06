@@ -27,7 +27,7 @@ When live editing the filter, it is bound to :live.")
       (put-text-property beg end 'paw-id num)
       (insert "\n"))))
 
-(defun paw-parse-entry-as-string (entry)
+(defun paw-parse-entry-as-string (entry &optional print-full-content)
   "Parse the paw ENTRY and return as string."
   (let* ((word (or (alist-get 'word entry) "NO TITLE"))
          (exp (alist-get 'exp entry))
@@ -51,31 +51,92 @@ When live editing the filter, it is bound to :live.")
          (origin-point (alist-get 'origin_point entry))
          (created-at (alist-get 'created_at entry))
          (word-width (- (window-width (get-buffer-window (paw-buffer))) 10 paw-trailing-width)))
-    (format "%s %s %s %s %s %s %s"
-            (paw-format-icon note-type content serverp origin-path)
-            (pcase serverp
-              (2 ;; local annotations
-               (paw-format-content note-type word content content-path content-filename))
-              (_
-               (s-pad-right 10 " " (propertize (s-truncate 10 word) 'face 'default) )))
-            (s-pad-right 12 " " (propertize (s-truncate 10 created-at "") 'face 'paw-date-face ))
-            (s-collapse-whitespace (propertize (if (stringp origin-point)
-                                                   origin-point
-                                                 "" ) 'face 'paw-origin-point-face ))
-            (s-collapse-whitespace (if origin-path
-                                       (pcase origin-type
-                                         ('wallabag-entry-mode
-                                          (propertize origin-path 'face 'paw-wallabag-face))
-                                         ('nov-mode
-                                          (propertize (file-name-nondirectory origin-path) 'face 'paw-nov-face))
-                                         ((or 'pdf-view-mode 'nov-mode "pdf-viewer")
-                                          (propertize (file-name-nondirectory origin-path) 'face 'paw-pdf-face))
-                                         ((or 'eaf-mode "browser" 'eww-mode)
-                                          (propertize origin-path 'face 'paw-link-face))
-                                         (_ (propertize (file-name-nondirectory origin-path ) 'face 'paw-file-face)))
-                                     ""))
-            (s-collapse-whitespace (propertize (if (s-blank-str? exp) "" (format "| %s |" exp)) 'face 'paw-exp-face ))
-            (s-collapse-whitespace (or (replace-regexp-in-string word (propertize word 'face '(bold underline)) note) "")))))
+    (if print-full-content
+        (format "%s %s"
+                (propertize (paw-format-icon note-type content serverp origin-path) 'paw-entry entry)
+                (pcase serverp
+                  (2 ;; local annotations
+                   (paw-format-full-content note-type word content content-path content-filename))
+                  (_
+                   (propertize (paw-get-eldoc-word entry) 'face 'default))))
+      (format "%s %s %s %s %s %s %s"
+              (propertize (paw-format-icon note-type content serverp origin-path) 'paw-entry entry)
+              (pcase serverp
+                (2 ;; local annotations
+                 (paw-format-content note-type word content content-path content-filename))
+                (_
+                 (s-pad-right 15 " " (propertize (s-truncate 15 word) 'face 'default) )))
+              (s-pad-right 12 " " (propertize (s-truncate 10 (if (stringp created-at)
+                                                                 created-at
+                                                               "" ) "") 'face 'paw-date-face ))
+              (s-collapse-whitespace (propertize (if (stringp origin-point)
+                                                     origin-point
+                                                   "" ) 'face 'paw-origin-point-face ))
+              (s-collapse-whitespace (if origin-path
+                                         (pcase origin-type
+                                           ('wallabag-entry-mode
+                                            (propertize origin-path 'face 'paw-wallabag-face))
+                                           ('elfeed-show-mode
+                                            (propertize origin-path 'face 'paw-link-face))
+                                           ('nov-mode
+                                            (propertize (file-name-nondirectory origin-path) 'face 'paw-nov-face))
+                                           ((or 'pdf-view-mode 'nov-mode "pdf-viewer")
+                                            (propertize (file-name-nondirectory origin-path) 'face 'paw-pdf-face))
+                                           ((or 'eaf-mode "browser" 'eww-mode)
+                                            (propertize origin-path 'face 'paw-link-face))
+                                           (_ (propertize (file-name-nondirectory origin-path ) 'face 'paw-file-face)))
+                                       ""))
+              (s-collapse-whitespace (propertize (if (s-blank-str? exp) "" (format "| %s |" exp)) 'face 'paw-exp-face ))
+              (s-collapse-whitespace (or (if note (replace-regexp-in-string word (propertize word 'face '(bold underline)) note) "") ""))))))
+
+(defun paw-parse-entry-as-string-2 (entry)
+  (concat
+   (propertize (or (alist-get 'created_at entry) "") 'paw-entry entry)
+   "  "
+   (let* ((word (alist-get 'word entry))
+          (content (alist-get 'content entry))
+          (content-json (condition-case nil
+                            (let ((output (json-read-from-string content)))
+                              (if (and (not (eq output nil))
+                                       (not (arrayp output))
+                                       (not (numberp output)))
+                                  output
+                                nil))
+                          (error nil)))
+          (content-filename (or (alist-get 'filename content-json) ""))
+          (content-path (or (alist-get 'path content-json) ""))
+          (serverp (or (alist-get 'serverp content-json) 2))
+          (origin-path (alist-get 'origin_path entry))
+          (origin-point (alist-get 'origin_point entry))
+          (origin-type (alist-get 'origin_type entry))
+          (note-type (alist-get 'note_type entry)))
+     (concat
+      (paw-format-column
+       (paw-format-icon note-type content serverp origin-path)
+       2 :left)
+      "  "
+      (propertize (s-truncate 55 (paw-get-real-word word) ) 'face 'paw-offline-face)
+      "  "
+      (if (stringp origin-point)
+          origin-point
+        (if origin-path
+            (pcase origin-type
+              ('wallabag-entry-mode
+               (propertize origin-path 'face 'paw-wallabag-face))
+              ('elfeed-show-mode
+               (propertize origin-path 'face 'paw-wallabag-face))
+              ('nov-mode
+               (propertize (file-name-nondirectory origin-path) 'face 'paw-nov-face))
+              ((or 'pdf-view-mode 'nov-mode "pdf-viewer")
+               (propertize (file-name-nondirectory origin-path) 'face 'paw-pdf-face))
+              ((or 'eaf-mode "browser" 'eww-mode)
+               (propertize origin-path 'face 'paw-link-face))
+              (_ (propertize (file-name-nondirectory origin-path ) 'face 'paw-file-face)))
+          ""))
+
+      ))
+   "  "
+   (s-collapse-whitespace (or (s-truncate 120 (alist-get 'note entry)) ""))))
 
 (defun paw-format-content (note-type word content content-path content-filename)
   (pcase (car note-type)
@@ -95,9 +156,28 @@ When live editing the filter, it is bound to :live.")
                   (propertize "IMAGS"
                               'face 'paw-offline-face
                               'display (create-image (expand-file-name content-path paw-note-dir) nil nil :width (if (eq system-type 'gnu/linux) 200 100) :height nil :margin '(0 . 1))) ))
-    (_ (s-pad-right 10 " "
-                    (propertize (s-truncate 10 (s-collapse-whitespace (or (if (equal content 0) word (if content content "")) (paw-get-real-word word))))
+    (_ (s-pad-right 15 " "
+                    (propertize (s-truncate 15 (s-collapse-whitespace (or (if (equal content 0) word (if content content "")) (paw-get-real-word word))))
                                 'face 'paw-offline-face)))))
+
+(defun paw-format-full-content (note-type word content content-path content-filename)
+  (pcase (car note-type)
+    ('attachment
+     (let* ((ext (downcase (file-name-extension content-path)))
+            (ext (if (string= ext "jpg") "jpeg" ext)))
+       (pcase ext
+         ((or "pbm" "xbm" "xpm" "gif" "jpeg" "tiff" "png" "svg" "jpg")
+          (propertize "IMAGS"
+                      'face 'paw-offline-face
+                      'display (create-image (expand-file-name content-path paw-note-dir) nil nil :width (if (eq system-type 'gnu/linux) 200 100) :height nil  :margin '(0 . 1))))
+         (_ (propertize (format "%s %s" (paw-attach-icon-for (expand-file-name content-filename)) content-filename )
+                        'face 'paw-offline-face))) ))
+    ('image
+     (propertize "IMAGS"
+                 'face 'paw-offline-face
+                 'display (create-image (expand-file-name content-path paw-note-dir) nil nil :width (if (eq system-type 'gnu/linux) 200 100) :height nil :margin '(0 . 1))))
+    (_ (propertize (s-collapse-whitespace (or (if (equal content 0) word (if content content "")) (paw-get-real-word word)))
+                   'face 'paw-offline-face))))
 
 ;;; format
 (defun paw-format-icon (note-type content serverp origin-path)
@@ -235,10 +315,10 @@ When FORCE is non-nil, redraw even when the database hasn't changed."
                         (paw-search-get-grouped-entries page)
                       (paw-search-get-filtered-entries page)))
            (len (length entries)))
-      (setq paw-search-entries-length (cdaar (paw-db-select
+      (setq paw-search-entries-length (or (cdaar (paw-db-select
                                               `[:select (funcall count word)
                                                :from
-                                               ,(paw-search-parse-filter paw-search-filter :group-p group-p)])))
+                                               ,(paw-search-parse-filter paw-search-filter :group-p group-p)])) 0 ))
       (setq paw-search-pages (ceiling paw-search-entries-length paw-search-page-max-rows))
       (erase-buffer)
       (dolist (entry entries)
@@ -247,7 +327,10 @@ When FORCE is non-nil, redraw even when the database hasn't changed."
             (funcall paw-print-entry-function entry id)))
       (if (< len paw-search-entries-length)
           (dotimes (i paw-search-pages)
-            (insert " " (buttonize (format "%d" (1+ i)) #'paw-search-more-data (1+ i)) " "))
+            (let ((button-string (format "%d" (1+ i))))
+              (if (equal (string-to-number button-string) paw-search-current-page)
+                  (add-face-text-property 0 (length button-string) 'paw-current-page-button-face t button-string))
+              (insert " " (buttonize button-string #'paw-search-more-data (1+ i)) " ") ))
         (insert "End of entries.\n"))
       (goto-char (point-min)))))
 
@@ -387,5 +470,23 @@ When FORCE is non-nil, redraw even when the database hasn't changed."
 (defun paw-search-refresh ()
   (interactive)
   (paw-search-update-buffer-with-keyword paw-search-filter))
+
+
+(defun paw-get-eldoc-word (&optional entry)
+  (let* ((entry (or entry (get-char-property (point) 'paw-entry) ))
+         (word (alist-get 'word entry))
+         (note-type (alist-get 'note_type entry))
+         (exp (alist-get 'exp entry))
+         (note (alist-get 'note entry)))
+    (pcase (car note-type)
+      ('word
+       (if entry
+           (format "%s | %s | %s"
+                   (propertize word 'face 'bold)
+                   (or (s-collapse-whitespace exp) "")
+                   (or (s-collapse-whitespace (replace-regexp-in-string word (propertize word 'face '(bold underline)) note)) "") )))
+      (_ (format "%s | %s"
+                 (propertize (paw-get-real-word word) 'face 'bold)
+                 (or (s-collapse-whitespace note)))))))
 
 (provide 'paw-search)

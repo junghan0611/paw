@@ -5,6 +5,7 @@
 (require 'paw-sdcv)
 (require 'paw-goldendict)
 (require 'paw-go-translate)
+(require 'paw-mac)
 (require 'paw-android)
 (require 'paw-dictionary)
 (require 'compile)
@@ -16,6 +17,21 @@
 
 (eval-when-compile (defvar paw-current-entry))
 
+(defcustom paw-player-program
+  (cond
+   ((eq system-type 'darwin)
+    (or (executable-find "afplay")
+        (executable-find "mpv")
+        (executable-find "mplayer")
+        (executable-find "mpg123")))
+   (t
+    (or (executable-find "mpv")
+        (executable-find "mplayer")
+        (executable-find "mpg123"))))
+  "paw player program"
+  :group 'paw
+  :type 'boolean)
+
 (defvar paw-provider-url "")
 
 (defcustom paw-say-word-p t
@@ -23,7 +39,7 @@
   :group 'paw
   :type 'boolean)
 
-(defcustom paw-tts-english-voice "en-US-AvaNeural"
+(defcustom paw-tts-english-voice "en-US-BrianMultilingualNeural"
   "English tts voice."
   :group 'paw
   :type '(choice (const :tag "Female en-US-AvaNeural" "en-US-AvaNeural")
@@ -74,11 +90,72 @@
                  (const :tag "Female en-ZA-LeahNeural" "en-ZA-LeahNeural")
                  (const :tag "Male en-ZA-LukeNeural" "en-ZA-LukeNeural")))
 
-(defcustom paw-tts-japanese-voice "ja-JP-NanamiNeural"
+(defun paw-tts-select-english-voice ()
+  "Select English TTS Voice."
+  (interactive)
+  (setq paw-tts-english-voice
+        (completing-read "Select English TTS Voice: "
+                         '("en-US-AvaNeural"
+                           "en-AU-WilliamNeural"
+                           "en-CA-ClaraNeural"
+                           "en-CA-LiamNeural"
+                           "en-GB-LibbyNeural"
+                           "en-GB-MaisieNeural"
+                           "en-GB-RyanNeural"
+                           "en-GB-SoniaNeural"
+                           "en-GB-ThomasNeural"
+                           "en-HK-SamNeural"
+                           "en-HK-YanNeural"
+                           "en-IE-ConnorNeural"
+                           "en-IE-EmilyNeural"
+                           "en-IN-NeerjaExpressiveNeural"
+                           "en-IN-NeerjaNeural"
+                           "en-IN-PrabhatNeural"
+                           "en-KE-AsiliaNeural"
+                           "en-KE-ChilembaNeural"
+                           "en-NG-AbeoNeural"
+                           "en-NG-EzinneNeural"
+                           "en-NZ-MitchellNeural"
+                           "en-NZ-MollyNeural"
+                           "en-PH-JamesNeural"
+                           "en-PH-RosaNeural"
+                           "en-SG-LunaNeural"
+                           "en-SG-WayneNeural"
+                           "en-TZ-ElimuNeural"
+                           "en-TZ-ImaniNeural"
+                           "en-US-AnaNeural"
+                           "en-US-AndrewMultilingualNeural"
+                           "en-US-AndrewNeural"
+                           "en-US-AriaNeural"
+                           "en-US-AvaMultilingualNeural"
+                           "en-US-AvaNeural"
+                           "en-US-BrianMultilingualNeural"
+                           "en-US-BrianNeural"
+                           "en-US-ChristopherNeural"
+                           "en-US-EmmaMultilingualNeural"
+                           "en-US-EmmaNeural"
+                           "en-US-EricNeural"
+                           "en-US-GuyNeural"
+                           "en-US-JennyNeural"
+                           "en-US-MichelleNeural"
+                           "en-US-RogerNeural"
+                           "en-US-SteffanNeural"
+                           "en-ZA-LeahNeural"
+                           "en-ZA-LukeNeural"))))
+
+(defcustom paw-tts-japanese-voice "ja-JP-KeitaNeural"
   "Japanese tts voice."
   :group 'paw
   :type '(choice (const :tag "Female ja-JP-NanamiNeural" "ja-JP-NanamiNeural")
                  (const :tag "Male ja-JP-KeitaNeural" "ja-JP-KeitaNeural")))
+
+(defun paw-tts-select-japanese-voice ()
+  "Select Japanese TTS Voice."
+  (interactive)
+  (setq paw-tts-japanese-voice
+        (completing-read "Select Japanese TTS Voice: "
+                         '("ja-JP-NanamiNeural"
+                           "ja-JP-KeitaNeural"))))
 
 (defcustom paw-tts-korean-voice "ko-KR-SunHiNeural"
   "Korean tts voice."
@@ -86,6 +163,15 @@
   :type '(choice (const :tag "Female ko-KR-SunHiNeural" "ko-KR-SunHiNeural")
           (const :tag "Male ko-KR-HyunsuNeural" "ko-KR-HyunsuNeural")
           (const :tag "Male ko-KR-InJoonNeural"  "ko-KR-InJoonNeural")))
+
+(defun paw-tts-select-korean-voice ()
+  "Select Korean TTS Voice."
+  (interactive)
+  (setq paw-tts-korean-voice
+        (completing-read "Select Korean TTS Voice: "
+                         '("ko-KR-SunHiNeural"
+                           "ko-KR-HyunsuNeural"
+                           "ko-KR-InJoonNeural"))))
 
 (defcustom paw-tts-zh-cn-voice "zh-CN-YunyangNeural"
   "Chinese tts voice, if detected as zh."
@@ -104,6 +190,26 @@
           (const :tag "Male zh-HK-WanLungNeural" "zh-HK-WanLungNeural")
           (const :tag "Female zh-TW-HsiaoYuNeural" "zh-TW-HsiaoYuNeural")
           (const :tag "Male zh-TW-YunJheNeural" "zh-TW-YunJheNeural")))
+
+(defun paw-tts-select-zh-cn-voice ()
+  "Select Chinese TTS Voice."
+  (interactive)
+  (setq paw-tts-zh-cn-voice
+        (completing-read "Select Chinese TTS Voice: "
+                         '("zh-CN-XiaoxiaoNeural"
+                           "zh-CN-XiaoyiNeural"
+                           "zh-CN-YunjianNeural"
+                           "zh-CN-YunxiNeural"
+                           "zh-CN-YunxiaNeural"
+                           "zh-CN-YunyangNeural"
+                           "zh-CN-liaoning-XiaobeiNeural"
+                           "zh-CN-shaanxi-XiaoniNeural"
+                           "zh-TW-HsiaoChenNeural"
+                           "zh-HK-HiuGaaiNeural"
+                           "zh-HK-HiuMaanNeural"
+                           "zh-HK-WanLungNeural"
+                           "zh-TW-HsiaoYuNeural"
+                           "zh-TW-YunJheNeural"))))
 
 (defcustom paw-tts-zh-tw-voice "zh-TW-HsiaoChenNeural"
   "Chinese tts voice, if detected as zh-Hant."
@@ -124,7 +230,27 @@
                  (const :tag "Female zh-TW-HsiaoYuNeural" "zh-TW-HsiaoYuNeural")
                  (const :tag "Male zh-TW-YunJheNeural" "zh-TW-YunJheNeural")))
 
-(defcustom paw-tts-multilingual-voice "en-US-AvaMultilingualNeural"
+(defun paw-tts-select-zh-tw-voice ()
+  "Select Chinese TTS Voice."
+  (interactive)
+  (setq paw-tts-zh-tw-voice
+        (completing-read "Select Chinese TTS Voice: "
+                         '("zh-CN-XiaoxiaoNeural"
+                           "zh-CN-XiaoyiNeural"
+                           "zh-CN-YunjianNeural"
+                           "zh-CN-YunxiNeural"
+                           "zh-CN-YunxiaNeural"
+                           "zh-CN-YunyangNeural"
+                           "zh-CN-liaoning-XiaobeiNeural"
+                           "zh-CN-shaanxi-XiaoniNeural"
+                           "zh-TW-HsiaoChenNeural"
+                           "zh-HK-HiuGaaiNeural"
+                           "zh-HK-HiuMaanNeural"
+                           "zh-HK-WanLungNeural"
+                           "zh-TW-HsiaoYuNeural"
+                           "zh-TW-YunJheNeural"))))
+
+(defcustom paw-tts-multilingual-voice "en-US-BrianMultilingualNeural"
   "Multilingual tts voice."
   :group 'paw
   :type '(choice (const :tag "Female en-US-AvaMultilingualNeural" "en-US-AvaMultilingualNeural")
@@ -134,16 +260,41 @@
           (const :tag "Male fr-FR-RemyMultilingualNeural" "fr-FR-RemyMultilingualNeural")
           (const :tag "Female fr-FR-VivienneMultilingualNeural" "fr-FR-VivienneMultilingualNeural")))
 
+(defun paw-tts-select-multilingual-voice ()
+  "Select Multilingual TTS Voice."
+  (interactive)
+  (setq paw-tts-multilingual-voice
+        (completing-read "Select Multilingual TTS Voice: "
+                         '("en-US-AvaMultilingualNeural"
+                           "en-US-BrianMultilingualNeural"
+                           "en-US-EmmaMultilingualNeural"
+                           "de-DE-ConradNeural"
+                           "de-DE-SeraphinaMultilingualNeural"
+                           "en-US-AndrewMultilingualNeural"
+                           "fr-FR-RemyMultilingualNeural"
+                           "fr-FR-VivienneMultilingualNeural"))))
+
 
 (defcustom paw-posframe-p nil
   "show paw-view-note in posframe"
   :group 'paw
   :type 'boolean)
 
-(defcustom paw-transalte-p t
-  "transalate automatically"
+(defcustom paw-translate-p t
+  "translate automatically"
   :group 'paw
   :type 'boolean)
+
+(define-obsolete-variable-alias 'paw-transalte-p
+  'paw-translate-p "paw 1.1.1")
+
+(defcustom paw-translate-context-p t
+  "translate context automatically"
+  :group 'paw
+  :type 'boolean)
+
+(define-obsolete-variable-alias 'paw-transalte-context-p
+  'paw-translate-context-p "paw 1.1.1")
 
 (defcustom paw-default-say-word-function 'paw-say-word ;; paw-resay-word to regenerate the pronunciation
   "paw read function"
@@ -158,11 +309,14 @@
   (cond
    ((eq system-type 'android)
     'paw-android-search-details)
+   ((eq system-type 'darwin)
+    'paw-mac-dictionary-search-details)
    (t
     'paw-goldendict-search-details))
   "paw share the word to system tool"
   :group 'paw
   :type '(choice (function-item paw-android-search-details)
+          (function-item paw-mac-dictionary-search-details)
           (function-item paw-moji-search-details)
           (function-item paw-eudic-search-details)
           (function-item paw-chatgpt-search-details)
@@ -175,11 +329,22 @@
           (function-item popweb-url-input)
           function))
 
-(defcustom paw-dictionary-function #'paw-dictionary-search
+(defcustom paw-dictionary-function
+  (cond
+   ((eq system-type 'android)
+    'paw-eudic-search-details)
+   ((eq system-type 'darwin)
+    'paw-mac-dictionary-search-details)
+   (t
+    'paw-goldendict-search-details))
   "paw dictionary function, Default dictionary function for querying
 the WORD."
   :group 'paw
-  :type 'function)
+  :type '(choice (function-item paw-dictionary-search)
+          (function-item paw-mac-dictionary-search-details)
+          (function-item paw-eudic-search-details)
+          (function-item paw-goldendict-search-details)
+          function))
 
 (defcustom paw-search-function #'paw-sdcv-search-with-dictionary-async
   "Default search function for querying the WORD. Its purpose is to
@@ -198,7 +363,7 @@ Be careful, the following behavior may be changed in the future:
   :type 'function)
 
 (defcustom paw-translate-function 'paw-go-translate-insert
-  "paw transalte function. Its purpose is to tranlate the WORD with
+  "paw translate function. Its purpose is to tranlate the WORD with
 LANG, and replace the content under Translation section inside
 BUFFER.
 
@@ -219,6 +384,12 @@ Be careful, the following behavior may be changed in the future.
   :type '(choice (function-item paw-gptel-translate)
           function))
 
+(defcustom paw-ask-ai-function 'paw-gptel-query
+  "paw ask ai (gptel) function"
+  :group 'paw
+  :type '(choice (function-item paw-gptel-query)
+          function))
+
 (defcustom paw-stardict-function 'paw-sdcv-search-detail
   "paw internal (sdcv) dictionary function"
   :group 'paw
@@ -229,11 +400,14 @@ Be careful, the following behavior may be changed in the future.
   (cond
    ((eq system-type 'android)
     'paw-eudic-search-details)
+   ((eq system-type 'darwin)
+    'paw-mac-dictionary-search-details)
    (t
     'paw-goldendict-search-details))
   "paw external dictionary function"
   :group 'paw
   :type '(choice (function-item paw-goldendict-search-details)
+          (function-item paw-mac-dictionary-search-details)
           (function-item paw-eudic-search-details)
           function))
 
@@ -310,7 +484,8 @@ Align should be a keyword :left or :right."
     (kagome . ,(plist-get properties :kagome))
     (sound . ,(plist-get properties :sound))
     (lang . ,(or (plist-get properties :lang) (paw-check-language word)))
-    (add-to-known-words . ,(plist-get properties :add-to-known-words))))
+    (add-to-known-words . ,(plist-get properties :add-to-known-words))
+    (context . ,(plist-get properties :context))))
 
 
 
@@ -439,6 +614,7 @@ If LAMBDA is non-nil, call it after creating the download process."
     (let ((say-word-function (car say-word-fns-list))
           (remaining-functions (cdr say-word-fns-list)))
       (funcall say-word-function word
+               :always-first t
                :lambda (lambda (file)
                          (if (and file (file-exists-p file) (> (file-attribute-size (file-attributes file)) 0))
                              (funcall finished file)
@@ -535,7 +711,7 @@ will prompt you every first time when download the audio file. "
                                :lambda lambda))
         ("jpod101-alternate" (paw-say-word-jpod101-alternate word :lambda lambda))))
     (if (and audio-url (file-exists-p audio-url) )
-        (setq paw-say-word-running-process (start-process "*paw say word*" nil "mpv" audio-url)))
+        (setq paw-say-word-running-process (start-process "*paw say word*" nil paw-player-program audio-url)))
     (if (and audio-url (file-exists-p audio-url) ) audio-url )))
 
 (defun paw-say-word-delete-mp3-file (hash refresh)
@@ -547,7 +723,7 @@ will prompt you every first time when download the audio file. "
 (defun paw-play-mp3-process-sentiel(process event mp3-file)
   ;; When process "finished", then begin playback
   (when (string= event "finished\n")
-    (start-process "*paw say word*" nil "mpv" mp3-file)))
+    (start-process "*paw say word*" nil paw-player-program mp3-file)))
 
 ;;;###autoload
 (defun paw-tts-cache-clear ()
@@ -580,7 +756,7 @@ will prompt you every first time when download the audio file. "
      (paw-remove-spaces-based-on-ascii-rate (or (thing-at-point 'sentence t) "")))
     ('pdf-view-mode "")
     ('paw-search-mode "")
-    ('paw-view-note-mode (alist-get 'note paw-current-entry))
+    ('paw-view-note-mode (alist-get 'context paw-current-entry))
     ('eaf-mode "")
     (_ (or (paw-get-sentence-or-line t) ""))))
 
@@ -654,6 +830,10 @@ ingored."
   :group 'paw
   :type 'string)
 
+(defcustom paw-non-ascii-word-separator " "
+  "The default separator to be placed between words in non-ascii languages."
+  :group 'paw
+  :type 'string)
 
 (defun paw-check-language (text)
   "If provide a filename as TEXT, it will use the file content to detect the
@@ -675,7 +855,9 @@ considered as `paw-default-language', otherwise use
 if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
 `paw-detect-language-p' is nil."
 
-  (cond ((file-exists-p text)
+  (cond ((string-empty-p text)
+         "en")
+        ((file-exists-p text)
          (if paw-detect-language-p
              (with-temp-buffer
                (pcase paw-detect-language-program
@@ -733,7 +915,9 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
 (defun paw-remove-spaces (text lang)
   "TODO Refomat the TEXT based on the LANG."
   (cond ((string= lang "en") (replace-regexp-in-string "[ \n]+" " " (replace-regexp-in-string "^[ \n]+" "" text)))
-        ((string= lang "ja") (replace-regexp-in-string "\\(^[ \t\n\r]+\\|[ \t\n\r]+\\)" "" text))
+        ((or (string= lang "ja")
+	     (string= lang "zh"))
+	 (replace-regexp-in-string "\\(^[ \t\n\r]+\\|[ \t\n\r]+\\)" "" text))
         (t text)))
 
 
@@ -764,6 +948,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
 ;;; mark/unmark
 
 (defun paw-previous ()
+  (interactive)
   (let ((location (get-text-property (point) 'paw-id)) previous)
     (cond
      ;; check the current point headline number first
@@ -791,6 +976,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
         (goto-char (text-property-any (point-min) (point-max) 'paw-id (1+ number))))))))
 
 (defun paw-next ()
+  (interactive)
   (let* ((header-in-line (text-property-not-all (line-beginning-position) (line-end-position) 'paw-id nil))
          (location (get-text-property (or header-in-line (point)) 'paw-id))
          next)
@@ -912,27 +1098,68 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
 
 ;;;###autoload
 (defun paw-scroll-up(arg)
+  "Customized scroll-up function."
   (interactive "p")
   (cond ((eq major-mode 'paw-view-note-mode)
          (call-interactively 'org-forward-element)
          (recenter 0))
         ((eq major-mode 'paw-search-mode)
-         (call-interactively 'paw-search-next-page))
+         (call-interactively 'paw-next))
+        ;; ((eq major-mode 'wallabag-search-mode)
+        ;;  (call-interactively 'wallabag-next-entry))
         ((eq major-mode 'nov-mode)
-         (call-interactively 'nov-scroll-up))
-        (t (call-interactively 'scroll-up))))
+         (if (>= (window-end) (point-max))
+             (progn
+               ;; (nov-next-document)
+               (message "End of this chapter")
+               (goto-char (point-max)))
+           (if (fboundp 'pixel-scroll-interpolate-down)
+               (if pixel-scroll-precision-interpolate-page
+                   (pixel-scroll-precision-interpolate (- (window-text-height nil t))
+                                                       ;; use an interpolation factor,
+                                                       ;; since we if visual line mode is applied, the last line may be cut off.
+                                                       nil 0.99)
+                 (cua-scroll-up))
+             (scroll-up arg))))
+        (t (if (fboundp 'pixel-scroll-interpolate-down)
+               (if pixel-scroll-precision-interpolate-page
+                   (pixel-scroll-precision-interpolate (- (window-text-height nil t))
+                                                       nil 1)
+                 (cua-scroll-up))
+             (scroll-up arg)))))
 
 ;;;###autoload
 (defun paw-scroll-down(arg)
+  "Customized scroll-down function."
   (interactive "P")
   (cond ((eq major-mode 'paw-view-note-mode)
          (call-interactively 'org-backward-element)
          (recenter 0))
         ((eq major-mode 'paw-search-mode)
-         (call-interactively 'paw-search-previous-page))
+         (call-interactively 'paw-previous))
+        ;; ((eq major-mode 'wallabag-search-mode)
+        ;;  (call-interactively 'wallabag-previous-entry))
         ((eq major-mode 'nov-mode)
-         (call-interactively 'nov-scroll-down))
-        (t (call-interactively 'scroll-down))))
+         (if (and (<= (window-start) (point-min))
+                  (> nov-documents-index 0))
+             (progn
+               ;; (nov-previous-document)
+               (message "Beginning of this chapter")
+               (goto-char (point-min)))
+           (if (fboundp 'pixel-scroll-interpolate-up)
+               (if pixel-scroll-precision-interpolate-page
+                   (pixel-scroll-precision-interpolate (window-text-height nil t)
+                                                       ;; use an interpolation factor,
+                                                       ;; since we if visual line mode is applied, the last line may be cut off.
+                                                       nil 0.99)
+                 (cua-scroll-down))
+             (scroll-down arg))))
+        (t (if (fboundp 'pixel-scroll-interpolate-up)
+               (if pixel-scroll-precision-interpolate-page
+                   (pixel-scroll-precision-interpolate (window-text-height nil t)
+                                                       nil 1)
+                 (cua-scroll-down))
+             (scroll-down arg)))))
 
 ;;;###autoload
 (defun paw-goto-toc()
@@ -994,9 +1221,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
          (englishp (if (string-match-p "[a-z-A-Z]" word) t nil)))
     (message "Playing...")
     (if englishp
-        (let ((player (or (executable-find "mpv")
-                          (executable-find "mplayer")
-                          (executable-find "mpg123"))))
+        (let ((player paw-player-program))
           (if player
               (start-process
                player
@@ -1007,9 +1232,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
       (if (eq system-type 'darwin)
           (call-process-shell-command
            (format "say -v Kyoko %s" word) nil 0)
-        (let ((player (or (executable-find "mpv")
-                          (executable-find "mplayer")
-                          (executable-find "mpg123"))))
+        (let ((player paw-player-program))
           (if player
               (start-process
                player
@@ -1120,7 +1343,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
         :error
         (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
                        (if lambda (funcall lambda nil) )
-                       (message "Failed to find audio URL, %s" error-thrown)))) )))
+                       (message "Failed to get audio on jpod101")))) )))
 
 ;; (paw-say-word-jpod101-alternate "日本" "") ;; all sounds
 ;; (paw-say-word-jpod101-alternate "日本" "日本") ;; all sounds
@@ -1218,7 +1441,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
         :error
         (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
                        (if lambda (funcall lambda nil) )
-                       (message "Failed to find audio URL, %s" error-thrown)))) )))
+                       (message "Failed to get audio on cambridge")))) )))
 
 
 (defvar pay-say-word-oxford-audio-list nil)
@@ -1308,8 +1531,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
         :error
         (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
                        (if lambda (funcall lambda nil) )
-                       (message "Failed to find audio URL, %s" error-thrown)))
-        ) )))
+                       (message "Failed to get audio on oxford")))))))
 
 
 ;; (paw-say-word-oxford "hello")
@@ -1614,8 +1836,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
         :error
         (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
                        (if lambda (funcall lambda nil) )
-                       (message "Failed to find audio URL, %s" error-thrown)))
-))))
+                       (message "Failed to get audio on forvo")))))))
 
 ;; (paw-say-word-forvo "彼ら")
 
@@ -1672,7 +1893,7 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
            :download-only))))
      :error
      (cl-function (lambda (&rest args &key error-thrown &allow-other-keys)
-                    (error "Failed to find audio URL, %s" error-thrown))))))
+                    (message "Failed to get audio on jisho"))))))
 
 ;; cloudflare need proper tls support
 ;; (paw-say-word-jisho "日本" "")
@@ -1731,9 +1952,9 @@ if `paw-detect-language-p' is t, or return as `paw-non-ascii-language' if
                                                              )
                                                         (pp file-url)
                                                         (start-process
-                                                         (executable-find "mpv")
+                                                         paw-player-program
                                                          nil
-                                                         (executable-find "mpv")
+                                                         paw-player-program
                                                          file-url))))))))))))))
 
 (defcustom paw-click-overlay-enable nil
@@ -1815,10 +2036,12 @@ DELAY the flash delay"
          (origin-id (alist-get 'origin_id entry))
          (origin-point (alist-get 'origin_point entry))
          (word (paw-get-real-word entry)))
+
     (pcase origin-type
       ('wallabag-entry-mode
        (require 'wallabag)
-       (let ((entry (wallabag-db-select :id origin-id)))
+       (let ((entry (or (wallabag-db-select :id origin-id)
+                        (wallabag-db-select :title (alist-get 'origin_path entry)))))
          (if entry
              (progn
                (let ((wallabag-show-entry-switch 'switch-to-buffer-other-window))
@@ -1849,12 +2072,14 @@ DELAY the flash delay"
                  (if switch
                      (find-file-other-window origin-path)
                    (find-file origin-path)))
-             (paw-goto-location origin-point word)
-             (unless switch
-               (other-window 1)
-               (if (buffer-live-p (get-buffer "*paw*"))
-                   (switch-to-buffer "*paw*"))))
-         (message "File %s not exists." origin-path)))
+             (if (eq major-mode 'eaf-mode)
+                 (eaf-interleave--pdf-viewer-goto-page
+                  (expand-file-name origin-path)
+                  (car origin-point))
+               (paw-goto-location origin-point word)))
+         (message "File %s not exists." origin-path))
+       ;; pdf tools can not highlight inline, print it instead
+       (message "%s" word))
       ('eww-mode
        (lexical-let ((origin-point origin-point)
                      (word word))
@@ -1881,7 +2106,7 @@ DELAY the flash delay"
          (let* ((buffer (eaf-interleave--find-buffer (expand-file-name origin-path))))
            (if buffer
                (progn
-                 (switch-to-buffer-other-window buffer)
+                 (switch-to-buffer buffer)
                  (eaf-interleave--display-buffer buffer)
                  (when origin-point
                    (with-current-buffer buffer
@@ -1896,22 +2121,35 @@ DELAY the flash delay"
                ("browser"
                 (eaf-interleave--open-web-url origin-path))
                (_ (eaf-interleave--open-web-url origin-path))))) ))
+      ('elfeed-show-mode
+       ;; not sure how to jump to elfeed atm, and jump to elfeed seems not very
+       ;; useful, since the entry may be lost
+       (browse-url origin-path))
       ("browser"
-       (if (eq system-type 'android)
-           (browse-url origin-path)
-         (require 'eaf)
-         (let* ((buffer (eaf-interleave--find-buffer (expand-file-name origin-path))))
-           (if buffer
+       (if-let* ((_ (fboundp 'wallabag-db-select))
+                 (entry (wallabag-db-select :url origin-path))
+                 (wallabag-show-entry-switch 'switch-to-buffer-other-window))
+           (if (yes-or-no-p "Found the article in wallabag, jump to wallabag? ")
                (progn
-                 (switch-to-buffer-other-window buffer)
-                 (eaf-interleave--display-buffer buffer))
-             (eaf-interleave--open-web-url origin-path)))))
+                 (wallabag-show-entry (car entry))
+                 (paw-goto-location origin-point word))
+             (browse-url origin-path))
+         ;; (if (eq system-type 'android)
+         ;;     (browse-url origin-path)
+         ;;   (require 'eaf)
+         ;;   (let* ((buffer (eaf-interleave--find-buffer (expand-file-name origin-path))))
+         ;;     (if buffer
+         ;;         (progn
+         ;;           (switch-to-buffer-other-window buffer)
+         ;;           (eaf-interleave--display-buffer buffer))
+         ;;       (eaf-interleave--open-web-url origin-path))))
+         (browse-url origin-path)))
       ("pdf-viewer"
        (require 'eaf)
        (let* ((buffer (eaf-interleave--find-buffer (expand-file-name origin-path))))
          (if buffer
              (progn
-               (switch-to-buffer-other-window buffer)
+               (switch-to-buffer buffer)
                (eaf-interleave--display-buffer buffer)
                (eaf-interleave--pdf-viewer-goto-page (expand-file-name origin-path) origin-point))
            (eaf-interleave--open-pdf (expand-file-name origin-path))
@@ -1946,26 +2184,12 @@ DELAY the flash delay"
         (mode major-mode))
     (with-selected-window window
       (cond
-       ;; ((run-hook-with-args-until-success 'org-noter--doc-goto-location-hook mode location))
        ((memq mode '(doc-view-mode pdf-view-mode))
-        (require 'org-noter)
         (let ((page (if (numberp location) location (car location)))
               (pos (if (numberp location) nil (cdr location))))
           (if (eq mode 'doc-view-mode)
               (doc-view-goto-page page)
-            (pdf-view-goto-page page)
-            ;; NOTE(nox): This timer is needed because the tooltip may introduce a delay,
-            ;; so syncing multiple pages was slow
-            (if pos
-                (when (>= org-noter-arrow-delay 0)
-                  (when org-noter--arrow-location (cancel-timer (aref org-noter--arrow-location 0)))
-                  (setq org-noter--arrow-location
-                        (vector (run-with-idle-timer org-noter-arrow-delay nil 'org-noter--show-arrow)
-                                window
-                                pos)))))
-          (if pos
-              (image-scroll-up (- (org-noter--conv-page-percentage-scroll pos)
-                                  (window-vscroll))))))
+            (pdf-view-goto-page page))))
        ((eq mode 'eaf-mode)
         (eaf-interleave--pdf-viewer-goto-page eaf--buffer-url location))
        ((eq mode 'nov-mode)
@@ -1993,7 +2217,6 @@ DELAY the flash delay"
       (unless paw-annotation-mode
         (paw-annotation-mode 1))
       ;; NOTE(nox): This needs to be here, because it would be issued anyway after
-      ;; everything and would run org-noter--nov-scroll-handler.
       ;; (redisplay)
       )))
 
@@ -2026,7 +2249,10 @@ Finally goto the location that was tuned."
           ((listp location)
            (setq beg (car location))
            (setq end (cdr location))
-           (if (string-match-p (regexp-quote (s-trim (s-collapse-whitespace (buffer-substring-no-properties beg end)))) (s-trim (s-collapse-whitespace real-word) ))
+           (if (and
+                (< beg (point-max))
+                (< end (point-max))
+                (string-match-p (regexp-quote (s-trim (s-collapse-whitespace (buffer-substring-no-properties beg end)))) (s-trim (s-collapse-whitespace real-word) )) )
                (progn
                  (goto-char (car location))
                  (paw-flash-show beg end 'highlight 1))
@@ -2054,39 +2280,52 @@ Finally goto the location that was tuned."
                  (progn
                    (setq beg (match-beginning 0))
                    (setq end (match-end 0)))
-               (message "Can not find \"%s\", maybe the location is changed, or it is an online word added from another location."
-                        (s-truncate 40 (s-collapse-whitespace real-word))))))
+               ;; fallback to normal search
+               (unless (search-forward real-word nil t)
+                   (message "Can not find \"%s\", maybe the location is changed, or it is an online word added from another location."
+                            (s-truncate 40 (s-collapse-whitespace real-word)))))))
           ;; goto the beg of tuned location
           (goto-char beg))))
 
-(defun paw-get-word ()
+(defun paw-get-word (&optional overlay)
   "Get the word at point or marked region."
   (cond ((eq major-mode 'paw-search-mode) (read-string "Add word: "))
         ((eq major-mode 'paw-view-note-mode) (paw-note-word))
         ((eq major-mode 'pdf-view-mode)
          (if (pdf-view-active-region-p)
-             (mapconcat 'identity (pdf-view-active-region-text) ? )
-           "EMPTY ANNOTATION"))
+             (replace-regexp-in-string "[ \n]+" " " (mapconcat 'identity (pdf-view-active-region-text) ? ))
+           ""))
         ((eq major-mode 'eaf-mode)
          (pcase eaf--buffer-app-name
            ("browser"
             (eaf-execute-app-cmd 'eaf-py-proxy-copy_text)
-            (sleep-for 0.01) ;; TODO small delay to wait for the clipboard
-            (eaf-call-sync "execute_function" eaf--buffer-id "get_clipboard_text"))
+            (sleep-for 0.1) ;; TODO small delay to wait for the clipboard
+            (car kill-ring))
            ("pdf-viewer"
             (eaf-execute-app-cmd 'eaf-py-proxy-copy_select)
-            (sleep-for 0.01) ;; TODO small delay to wait for the clipboard
-            (eaf-call-sync "execute_function" eaf--buffer-id "get_clipboard_text"))))
-        (mark-active (buffer-substring-no-properties (region-beginning) (region-end)))
-        (t (substring-no-properties (or (thing-at-point 'word t) "")))))
-
+            (sleep-for 0.1) ;; TODO small delay to wait for the clipboard
+            (car kill-ring))))
+        (t (if mark-active
+               (let ((result (if (eq major-mode 'nov-mode)
+                                (paw-remove-spaces-based-on-ascii-rate (buffer-substring-no-properties (region-beginning) (region-end)))
+                              (buffer-substring-no-properties (region-beginning) (region-end)))))
+                 (if overlay
+                     (let ((beg (region-beginning))
+                           (end (region-end)))
+                       (paw-click-show beg end 'paw-click-face)))
+                 result)
+             (if overlay
+                 (-let (((beg . end) (bounds-of-thing-at-point 'symbol)))
+                   (if (and beg end) (paw-click-show beg end 'paw-click-face))))
+             (substring-no-properties (or (thing-at-point 'symbol t) ""))))))
 
 (defun paw-view-note-in-eaf (note url title word)
   ;; TODO Don't use it, incomplete, need to work with customized eaf
   (let* ((entry (or (car (paw-candidate-by-word word))
                     (car (paw-candidate-by-word (downcase word))))))
+    (if entry (setf (alist-get 'context entry) note)) ;; Set the context
     (paw-view-note (or entry (paw-new-entry word
-                                            :origin_type "browser"
+                                            :origin_type eaf--buffer-app-name
                                             :serverp 3
                                             :content (json-encode `((word . ,word)
                                                                     (url . ,url)
@@ -2095,11 +2334,29 @@ Finally goto the location that was tuned."
                                             :origin_path url
                                             :origin_point title
                                             :lang (paw-check-language word)
-                                            :note note ) )
+                                            :context note ) )
                    :buffer-name paw-view-note-buffer-name
                    ;; :buffer-name (format "*Paw: %s*" title)
                    ;; :display-func 'pop-to-buffer
                    )
     nil))
+
+(defun paw-get-location ()
+  "Get location at point or marked region."
+  (pcase major-mode
+    ('nov-mode
+     (if mark-active
+         (cons nov-documents-index (cons (region-beginning) (region-end)))
+       (cons nov-documents-index (point))))
+    ('pdf-view-mode
+     (cons (image-mode-window-get 'page) 0))
+    ('eaf-mode
+     (pcase eaf--buffer-app-name
+       ("pdf-viewer"
+        (string-to-number (eaf-call-sync "execute_function" eaf--buffer-id "current_page")))
+       ("browser" 0)
+       (_ 0)))
+    (_ (if mark-active (cons (region-beginning) (region-end))
+         (point)))))
 
 (provide 'paw-util)

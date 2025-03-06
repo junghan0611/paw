@@ -477,6 +477,29 @@ serverp:
                  (= serverp 5)
                  (= serverp 6))])))
 
+(defun paw-candidates-only-words ()
+  (mapcar
+   (lambda(x)
+     (cl-pairlis
+      '(word
+        exp
+        content
+        serverp
+        note
+        note_type
+        origin_type
+        origin_path
+        origin_id
+        origin_point
+        created_at)
+      x))
+   (paw-db-sql
+    `[:select * :from
+      [:select [items:word items:exp status:content status:serverp status:note status:note_type status:origin_type status:origin_path status:origin_id status:origin_point status:created_at] :from items
+       :inner :join status
+       :on (= items:word status:word)]
+      :where (not (like word "%:id:%"))])))
+
 (defun paw-candidates-only-links ()
   (mapcar
    (lambda(x)
@@ -521,7 +544,7 @@ serverp:
 (defun paw-get-origin-path ()
   (pcase major-mode
     ('paw-search-mode
-     "WORDLIST")
+     (alist-get 'origin_path (get-char-property (point) 'paw-entry)))
     ('wallabag-entry-mode
      (alist-get 'title (get-text-property 1 'wallabag-entry)))
     ('nov-mode
@@ -532,6 +555,8 @@ serverp:
      (abbreviate-file-name eaf--buffer-url))
     ('paw-view-note
      (alist-get 'origin-path (paw-note-word)))
+    ('elfeed-show-mode
+     (if elfeed-show-entry (elfeed-entry-link elfeed-show-entry) "" ))
     (_
      (if (buffer-file-name)
          (abbreviate-file-name (buffer-file-name))

@@ -6,7 +6,7 @@
 ;; URL: https://github.com/chenyanming/paw
 ;; Keywords: tools
 ;; Created: 31 May 2021
-;; Version: 1.1.0
+;; Version: 1.1.1
 ;; Package-Requires: ((emacs "25.1") (request "0.3.3") (emacsql "3.0.0") (s "1.12.0") (dash "2.17.0") (go-translate "3.0.5") (gptel "0.8.6") (focus "1.0.1") (svg-lib "0.3") (anki-editor "0.3.3") (esxml "0.3.7"))
 
 ;; This file is NOT part of GNU Emacs.
@@ -40,6 +40,7 @@
 (require 'paw-faces)
 (require 'paw-search)
 (require 'paw-request)
+(require 'paw-server)
 
 (require 'thingatpt)
 (require 'pcase)
@@ -74,11 +75,15 @@
 (defun paw-header ()
   "Header function for *paw* buffer."
   (format "%s%s"
-          (format "Annotations: %s  Total: %s  Page: %s/%s  "
-                  (propertize paw-db-file 'face 'font-lock-keyword-face)
+          (format "%sTotal: %s  Page: %s/%s  %s %s %s"
+                  (if (string-equal system-type "android") ""
+                    (format "Annotations: %s  " (propertize paw-db-file 'face 'font-lock-keyword-face) ))
                   (propertize (number-to-string paw-search-entries-length) 'face 'font-lock-type-face)
                   (propertize (number-to-string paw-search-current-page) 'face 'font-lock-type-face)
-                  (propertize (number-to-string paw-search-pages) 'face 'font-lock-type-face))
+                  (propertize (number-to-string paw-search-pages) 'face 'font-lock-type-face)
+                  (paw-auto-audio-play-button)
+                  (paw-auto-translate-button)
+                  (paw-auto-ai-translate-button))
           (format "%s"
                   (if (equal paw-search-filter "")
                       ""
@@ -117,6 +122,7 @@
     (define-key map "i" #'paw-find-note)
     (define-key map "I" #'paw-find-notes)
     (define-key map "'" #'paw-list-groups)
+    (define-key map "," #'paw-list-annotations)
     (define-key map "q" #'paw-quit)
     (define-key map "m" #'paw-mark-and-forward)
     (define-key map "e" #'paw-anki-gui-edit-note)
@@ -158,17 +164,21 @@
       (kbd "i") 'paw-find-note
       (kbd "I") 'paw-find-notes
       (kbd "'") 'paw-list-groups
+      (kbd ",") 'paw-list-annotations
       (kbd "q") 'paw-quit
       (kbd "m") 'paw-mark-and-forward
       (kbd "o") 'paw-anki-gui-browse
       (kbd "<DEL>") 'paw-unmark-and-backward) )
 
 ;;;###autoload
-(defun paw (&optional silent path)
+(defun paw (&optional silent)
   (interactive "P")
   (paw-db)
   (let ((beg (point))
-        (pos (window-start)))
+        (pos (window-start))
+        (keyword (if (and paw-filter-by-current-file-at-startup paw-annotation-mode)
+                     (paw-get-origin-path) paw-search-filter))
+        (group-filteringp (and paw-filter-by-current-file-at-startup paw-annotation-mode)))
     (with-current-buffer (paw-buffer)
       (paw-search-update-buffer)
       (paw-search-mode))
@@ -179,9 +189,10 @@
       (unless silent
         (switch-to-buffer (paw-buffer))
         (goto-char (point-min))))
-    (when path
-      (paw-search-update-buffer-with-keyword
-       (if paw-annotation-mode (paw-get-origin-path) "")))))
+    (when group-filteringp
+      (setq paw-group-filteringp t)
+      (setq paw-search-current-page 1))
+    (paw-search-update-buffer-with-keyword keyword)))
 
 (defun paw-goto-dashboard (&optional entry)
   (interactive)
@@ -219,7 +230,7 @@
   (interactive)
   (let* ((origin-point (paw-get-location)))
     (if (featurep 'ivy-read)
-        (ivy-read (format "New Location %s for: " origin-point) (paw-candidates-format nil)
+        (ivy-read (format "New Location %s for: " origin-point) (paw-candidates-format)
                   :sort nil
                   :action (lambda (x)
                             (let* ((entry (get-text-property 0 'paw-entry x))
@@ -251,7 +262,7 @@
                                 ;; update buffer
                                 (if (buffer-live-p (get-buffer "*paw*"))
                                     (paw t)) ))))
-      (let* ((entry (consult--read (paw-candidates-format nil)
+      (let* ((entry (consult--read (paw-candidates-format)
                                    :prompt (format "New Location %s for: " origin-point)
                                    :sort nil
                                    :lookup (lambda(_ candidates cand)
@@ -334,12 +345,18 @@
                                 (abbreviate-file-name file)
                               (user-error "No this file, please input another path")))))
     (paw-db-update-all-origin_path origin-path new-origin-path)
+    (message "Update from %s to %s done." origin-path new-origin-path)
     (if (buffer-live-p (get-buffer "*paw*"))
         (paw t))))
 
 
 (defcustom paw-add-to-known-words-without-asking t
   "If non-nil, add the word to known words without asking."
+  :group 'paw
+  :type 'boolean)
+
+(defcustom paw-filter-by-current-file-at-startup t
+  "If non-nil, filter the annotations by current file at startup."
   :group 'paw
   :type 'boolean)
 
@@ -361,7 +378,7 @@
                 (if (alist-get 'add-to-known-words (car entries))
                     (if paw-add-to-known-words-without-asking
                         t
-                        (format "Add '%s' to known words? " (alist-get 'word (car entries))))
+                      (format "Add '%s' to known words? " (alist-get 'word (car entries))))
                   (yes-or-no-p (format "Delete: %s " (alist-get 'word (car entries))) )))
             (yes-or-no-p (format "Delete %s entries" (length entries)) ) )
       (when entries
@@ -408,50 +425,61 @@
                                      ;; delete overlay search on the buffers enable `paw-annotation-mode'
                                      (paw-delete-word-overlay word))
                                  (message "Known words file not exists.")))
+			 ("zh" (if (and paw-hsk-default-known-words-file (file-exists-p paw-hsk-default-known-words-file))
+                                   (progn
+                                     (with-temp-buffer
+                                       (insert-file-contents paw-hsk-default-known-words-file)
+                                       (goto-char (point-max))
+                                       (insert word "\n")
+                                       (write-region (point-min) (point-max) paw-hsk-default-known-words-file)
+                                       (message "Added %s to known words." word))
+                                     ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                     (paw-delete-word-overlay word))
+                                 (message "Known words file not exists.")))
                          (_ (message "Unsupport language %s during adding known words." lang)))
-                       (if (not (paw-online-p serverp))
-                           ;; not in the server delete directly
-                           (progn
-                             ;; delete word in db
-                             (paw-db-delete word)
-                             ;; delete image/attachment
-                             (if content-path
-                                 (pcase (car note-type)
-                                   ('image (let ((png (expand-file-name content-path paw-note-dir)))
-                                             (if (file-exists-p png)
-                                                 (delete-file png)
-                                               (message "Image %s not exists." png))))
-                                   ('attachment (let ((attachment (expand-file-name content-path paw-note-dir)))
-                                                  (if (file-exists-p attachment)
-                                                      (delete-file attachment)
-                                                    (message "Attachment %s not exists." attachment))))
-                                   (_ nil)))
-                             ;; delete overlay search on the buffers enable `paw-annotation-mode'
-                             (paw-delete-word-overlay word)
-                             (paw-search-refresh))
-                         (cl-loop for server in paw-online-word-servers do
-                                  (pcase server
-                                    ('eudic
-                                     ;; it is in the server, must delete server's first
-                                     (paw-request-eudic-delete-word word origin_id
-                                                                     (lambda()
-                                                                       ;; delete word in db
-                                                                       (paw-db-delete word)
-                                                                       ;; delete overlay search on the buffers enable `paw-annotation-mode'
-                                                                       (paw-delete-word-overlay word)
-                                                                       (paw-search-refresh))))
-                                    ('anki
-                                     ;; it is in the server, must delete server's first
-                                     (paw-request-anki-delete-word word
-                                                                     (lambda()
-                                                                       ;; delete word in db
-                                                                       (paw-db-delete word)
-                                                                       ;; delete overlay search on the buffers enable `paw-annotation-mode'
-                                                                       (paw-delete-word-overlay word)
-                                                                       (paw-search-refresh)))))
-                                  )
+                     (if (not (paw-online-p serverp))
+                         ;; not in the server delete directly
+                         (progn
+                           ;; delete word in db
+                           (paw-db-delete word)
+                           ;; delete image/attachment
+                           (if content-path
+                               (pcase (car note-type)
+                                 ('image (let ((png (expand-file-name content-path paw-note-dir)))
+                                           (if (file-exists-p png)
+                                               (delete-file png)
+                                             (message "Image %s not exists." png))))
+                                 ('attachment (let ((attachment (expand-file-name content-path paw-note-dir)))
+                                                (if (file-exists-p attachment)
+                                                    (delete-file attachment)
+                                                  (message "Attachment %s not exists." attachment))))
+                                 (_ nil)))
+                           ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                           (paw-delete-word-overlay word)
+                           (paw-search-refresh))
+                       (cl-loop for server in paw-online-word-servers do
+                                (pcase server
+                                  ('eudic
+                                   ;; it is in the server, must delete server's first
+                                   (paw-request-eudic-delete-word word origin_id
+                                                                  (lambda()
+                                                                    ;; delete word in db
+                                                                    (paw-db-delete word)
+                                                                    ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                                                    (paw-delete-word-overlay word)
+                                                                    (paw-search-refresh))))
+                                  ('anki
+                                   ;; it is in the server, must delete server's first
+                                   (paw-request-anki-delete-word word
+                                                                 (lambda()
+                                                                   ;; delete word in db
+                                                                   (paw-db-delete word)
+                                                                   ;; delete overlay search on the buffers enable `paw-annotation-mode'
+                                                                   (paw-delete-word-overlay word)
+                                                                   (paw-search-refresh)))))
+                                )
 
-                         ))))))))
+                       ))))))))
 
 (defun paw-delete-word-overlay(word)
   "Delete overlay search on the buffers enable `paw-annotation-mode'"
@@ -569,23 +597,6 @@ It is fast but has drawbacks:
                      ;;           (car (assoc cand candidates)))
                      ))))
 
-(defun paw-get-eldoc-word ()
-  (let* ((entry (get-char-property (point) 'paw-entry))
-        (word (alist-get 'word entry))
-        (note-type (alist-get 'note_type entry))
-        (exp (alist-get 'exp entry))
-        (note (alist-get 'note entry)))
-    (pcase (car note-type)
-      ('word
-       (if entry
-           (format "%s | %s | %s"
-                   (propertize word 'face 'bold)
-                   (or (s-collapse-whitespace exp) "")
-                   (or (s-collapse-whitespace (replace-regexp-in-string word (propertize word 'face '(bold underline)) note)) "") )))
-      (_ (format "%s | %s"
-                 (propertize (paw-get-real-word word) 'face 'bold)
-                 (or (s-collapse-whitespace note)))))))
-
 (defun paw-search-input ()
   (interactive)
   (let* ((sdcv-say-word-p t)
@@ -596,16 +607,62 @@ It is fast but has drawbacks:
 
 
 (defun paw-quit ()
-  "Quit paw."
+  "Quit paw, if `paw-view-note-buffer-name' windows is shown, quit that window first."
   (interactive)
-  (when (get-buffer "*paw*")
-    (quit-window)
-    (kill-buffer "*paw*"))
-  (setq paw-search-pages 0)
-  (setq paw-search-current-page 1)
-  ;; close the db, so that it will release the db, and start to sync (if use syncthing)
-  (paw-close-db)
+  (if (get-buffer-window paw-view-note-buffer-name)
+      (quit-window nil (get-buffer-window paw-view-note-buffer-name))
+    (when (get-buffer "*paw*")
+      (quit-window)
+      (kill-buffer "*paw*"))
+    (setq paw-search-pages 0)
+    (setq paw-search-current-page 1)
+    ;; close the db, so that it will release the db, and start to sync (if use syncthing)
+    (paw-close-db)))
 
-  )
+(defun paw-make-text-button-text (text map mouse-face help-echo)
+  (propertize text 'keymap map 'mouse-face mouse-face 'help-echo help-echo))
+
+(defun paw-auto-audio-play-button ()
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<header-line> <mouse-1>") (lambda()
+                                                      (interactive)
+                                                      (if paw-say-word-p
+                                                        (progn
+                                                          (setq paw-say-word-p nil)
+                                                          (message "Disable auto play audio"))
+                                                      (setq paw-say-word-p t)
+                                                      (message "Enable auto play audio")) ))
+    (paw-make-text-button-text (if paw-say-word-p "📢" "🔇")
+                                map 'highlight (format "Auto Play Audio? Now it is %s." (if paw-say-word-p "Enable" "Disable")))))
+
+(defun paw-auto-translate-button ()
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<header-line> <mouse-1>") (lambda()
+                                                      (interactive)
+                                                      (if paw-translate-p
+                                                          (progn
+                                                            (setq paw-translate-p nil)
+                                                            (setq paw-translate-context-p nil)
+                                                            (message "Disable auto translate"))
+                                                        (setq paw-translate-p t)
+                                                        (setq paw-translate-context-p nil)
+                                                        (message "Enable auto translate")) ))
+    (paw-make-text-button-text (if paw-translate-p "📖" "📚")
+                                map 'highlight (format "Auto Translate? Now it is %s." (if paw-translate-p "Enable" "Disable")))))
+
+(defun paw-auto-ai-translate-button ()
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<header-line> <mouse-1>") (lambda()
+                                                      (interactive)
+                                                      (if paw-ai-translate-p
+                                                          (progn
+                                                            (setq paw-ai-translate-p nil)
+                                                            (setq paw-ai-translate-context-p nil)
+                                                            (message "Disable auto translate"))
+                                                        (setq paw-ai-translate-p t)
+                                                        (setq paw-ai-translate-context-p nil)
+                                                        (message "Enable auto ai translate")) ))
+    (paw-make-text-button-text (if paw-ai-translate-p "🕮" "📘")
+                                map 'highlight (format "Auto AI Translate? Now it is %s." (if paw-ai-translate-p "Enable" "Disable")))))
 
 (provide 'paw)

@@ -16,11 +16,12 @@
 (require 'focus)
 (require 'thingatpt)
 (require 'evil-core nil t)
+(require 'immersive-translate nil t)
 
 (declare-function evil-define-key* "ext:evil-core.el" t t)
 
 (defcustom paw-annotation-mode-supported-modes
-  '(nov-mode org-mode paw-view-note-mode wallabag-entry-mode eww-mode eaf-mode)
+  '(nov-mode org-mode paw-view-note-mode wallabag-entry-mode eww-mode eaf-mode elfeed-show-mode pdf-view-mode)
   "Supported modes for paw-annotation-mode."
   :group 'paw
   :type 'list)
@@ -36,7 +37,8 @@
   :type 'list)
 
 (defcustom paw-annotation-after-string-space (if (eq system-type 'android) " " "\u2009")
-  "Space string for annotation. Currently only support Japanese."
+  "TODO Space string for annotation. Currently only support Japanese.
+This is disabled since it does not work well, please don't use it at this moment."
   :group 'paw
   :type '(choice (const :tag "Normal space" " ")
           (const :tag "Thin space" "\u2009")
@@ -113,7 +115,7 @@ Argument EVENT mouse event."
   :type 'directory)
 
 
-(defun paw-add-general (word type location &optional gptel note path)
+(defun paw-add-general (word type location &optional gptel note path origin_type)
   (let* ((word (pcase (car type)
                  ('bookmark
                   (pcase major-mode
@@ -185,7 +187,8 @@ Argument EVENT mouse event."
                                   (read-from-minibuffer "Please insert an url link: "))
                                  ("annotation"
                                   (let* ((entry (get-text-property 0 'paw-entry
-                                                                   (ivy-read "Please insert an annotation: " (paw-candidates-format t)
+                                                                   (ivy-read "Please insert an annotation: "
+                                                                             (paw-candidates-format :all t)
                                                                              :sort nil)))
                                          (word (alist-get 'word entry)))
                                     word))
@@ -215,9 +218,10 @@ Argument EVENT mouse event."
                         "" ; mark is empty, since the note not that useful, if need sentence note, use `paw-add-word'
                       (paw-get-note)))) )
      :note_type type
-     :origin_type (if (derived-mode-p 'eaf-mode)
-                      eaf--buffer-app-name
-                    major-mode)
+     :origin_type (or origin_type
+                      (if (derived-mode-p 'eaf-mode)
+                          eaf--buffer-app-name
+                        major-mode))
      :origin_path (or path (paw-get-origin-path))
      :origin_id (paw-get-id)
      :origin_point location
@@ -251,16 +255,27 @@ Argument EVENT mouse event."
              ('pdf-view-mode nil)
              ('eaf-mode nil)
              ('paw-search-mode nil)
+             ('paw-view-note-mode
+              ;; add highlight/done/cancel etc in paw-view-note-mode, only add annotation to that file
+              (if-let* ((buffer (-first (lambda (b)
+                                          (with-current-buffer b
+                                            (equal buffer-file-truename (paw-get-origin-path))))
+                                        (buffer-list))))
+                (with-current-buffer buffer
+                    (paw-add-annotation-overlay (car candidates))))) ;; add highlight etc in side paw-view-note-mode
              (_ (paw-add-annotation-overlay (car candidates))))))
       ;; update *paw* buffer
       (if (buffer-live-p (get-buffer "*paw*"))
           (paw t)))
 
     ;; enable paw annotation mode after adding
-    (unless paw-annotation-mode
+    ;; not add from paw-view-note
+    (unless (or paw-annotation-mode (not (eq major-mode 'pdf-view-mode)))
       (paw-annotation-mode 1))
 
-    ))
+    ;; pdf-view-mode can not highlight inline, print out instead
+    (if (and (eq major-mode 'pdf-view-mode))
+        (message "Added: %s" word))))
 
 (defun paw-download-ico (&optional location)
   "Download ico file from location."
@@ -341,29 +356,12 @@ icos of all links (`paw-list-all-links') in database."
       (copy-file src dst t)
       json)))
 
+
 ;;;###autoload
 (defun paw-add-highlight (prefix)
   "Add an annotation."
   (interactive "P")
-  (let* ((word (cond ((eq major-mode 'paw-search-mode) "")
-                     ((eq major-mode 'pdf-view-mode)
-                      (if (pdf-view-active-region-p)
-                          (mapconcat 'identity (pdf-view-active-region-text) ? )
-                        "EMPTY ANNOTATION"))
-                     ((eq major-mode 'eaf-mode)
-                      (pcase eaf--buffer-app-name
-                        ("browser"
-                         (eaf-execute-app-cmd 'eaf-py-proxy-copy_text)
-                         (sleep-for 0.01) ;; TODO small delay to wait for the clipboard
-                         (eaf-call-sync "execute_function" eaf--buffer-id "get_clipboard_text"))
-                        ("pdf-viewer"
-                         (eaf-execute-app-cmd 'eaf-py-proxy-copy_select)
-                         (sleep-for 0.01) ;; TODO small delay to wait for the clipboard
-                         (eaf-call-sync "execute_function" eaf--buffer-id "get_clipboard_text"))))
-                     (mark-active (if (eq major-mode 'nov-mode)
-                                      (paw-remove-spaces-based-on-ascii-rate (buffer-substring-no-properties (region-beginning) (region-end)))
-                                    (buffer-substring-no-properties (region-beginning) (region-end))))
-                     (t (substring-no-properties (or (thing-at-point 'symbol t) "")))))
+  (let* ((word (paw-get-word))
          (type paw-annotation-current-highlight-type )
          (location (pcase major-mode
                      ('nov-mode
@@ -377,11 +375,7 @@ icos of all links (`paw-list-all-links') in database."
                                                       (setq beg (point))
                                                       (cons beg end)) ))))
                      ('pdf-view-mode
-                      (require 'org-noter)
-                      (org-noter--doc-approx-location
-                       (org-noter--conv-page-scroll-percentage
-                        (+ (window-vscroll)
-                           (cdr (posn-col-row (event-start (read-event "Click the location"))))))))
+                      (cons (image-mode-window-get 'page) 0))
                      ('eaf-mode
                       (pcase eaf--buffer-app-name
                         ("pdf-viewer"
@@ -411,27 +405,6 @@ icos of all links (`paw-list-all-links') in database."
 (defun paw-get-stamp ()
   (cons 'stamp  (ido-completing-read "Select a stamp: " paw-annotation-stamps)))
 
-(defun paw-get-location ()
-  "Get location at point or marked region."
-  (pcase major-mode
-    ('nov-mode
-     (if mark-active
-         (cons nov-documents-index (cons (region-beginning) (region-end)))
-       (cons nov-documents-index (point))))
-    ('pdf-view-mode
-     (require 'org-noter)
-     (org-noter--doc-approx-location
-      (org-noter--conv-page-scroll-percentage
-       (+ (window-vscroll)
-          (cdr (posn-col-row (event-start (read-event "Click the location"))))))))
-    ('eaf-mode
-     (pcase eaf--buffer-app-name
-       ("pdf-viewer"
-        (string-to-number (eaf-call-sync "execute_function" eaf--buffer-id "current_page")))
-       ("browser" 0)
-       (_ 0)))
-    (_ (if mark-active (cons (region-beginning) (region-end))
-         (point)))))
 
 ;;;###autoload (autoload 'paw-add "paw-annotation")
 (defmacro paw-add (field)
@@ -492,11 +465,7 @@ icos of all links (`paw-list-all-links') in database."
                     ('nov-mode
                      (cons nov-documents-index (point)))
                     ('pdf-view-mode
-                     (require 'org-noter)
-                     (org-noter--doc-approx-location
-                      (org-noter--conv-page-scroll-percentage
-                       (+ (window-vscroll)
-                          (cdr (posn-col-row (event-start (read-event "Click the location"))))))))
+                     (cons (image-mode-window-get 'page) 0))
                     ('eaf-mode
                      (string-to-number (eaf-call-sync "execute_function" eaf--buffer-id "current_page")))
                     (_ (point))))
@@ -512,11 +481,7 @@ icos of all links (`paw-list-all-links') in database."
                     ('nov-mode
                      (cons nov-documents-index (point)))
                     ('pdf-view-mode
-                     (require 'org-noter)
-                     (org-noter--doc-approx-location
-                      (org-noter--conv-page-scroll-percentage
-                       (+ (window-vscroll)
-                          (cdr (posn-col-row (event-start (read-event "Click the location"))))))))
+                     (cons (image-mode-window-get 'page) 0))
                     ('eaf-mode
                      (string-to-number (eaf-call-sync "execute_function" eaf--buffer-id "current_page")))
                     (_ (point))))
@@ -743,7 +708,10 @@ icos of all links (`paw-list-all-links') in database."
             (t
              ;; TODO the match is not robust
              ;; first check string between beg and end
-             (if (string-match-p (regexp-quote (s-trim (s-collapse-whitespace (buffer-substring-no-properties beg end)) ) ) (s-trim (s-collapse-whitespace real-word) ))
+             (if (and
+                  (< beg (point-max))
+                  (< end (point-max))
+                  (string-match-p (regexp-quote (s-trim (s-collapse-whitespace (buffer-substring-no-properties beg end)) ) ) (s-trim (s-collapse-whitespace real-word) )) )
                  (unless (cl-find-if
                           (lambda (o)
                             (equal (alist-get 'word (overlay-get o 'paw-entry)) word))
@@ -957,9 +925,9 @@ words will be updated.")
         (paw-delete-annotation entry))))
 
 ;;;###autoload
-(defun paw-list-annotations (whole-file)
-  (interactive "P")
-  (consult--read (paw-candidates-format nil whole-file t t)
+(defun paw-list-annotations ()
+  (interactive)
+  (consult--read (paw-candidates-format :sort t :print-full-content t)
                  :prompt "Annotations: "
                  :sort nil
                  :history nil
@@ -973,16 +941,12 @@ words will be updated.")
                                   (old-origin-path (alist-get 'origin_path entry))
                                   (new-origin-path (paw-get-origin-path))
                                   (note-type (car (alist-get 'note_type entry))))
-                             (pcase note-type
-                               ('bookmark (if (equal old-origin-path new-origin-path)
-                                              (paw-goto-location origin-point word)
-                                            (paw-find-origin entry)))
-                               (_ (paw-find-note entry)))))))
+                             (paw-find-origin entry)))))
 
 ;;;###autoload
 (defun paw-list-all-annotations ()
   (interactive)
-  (consult--read (paw-candidates-format t)
+  (consult--read (nreverse (paw-candidates-format :all t))
                  :prompt "All Annotations: "
                  :sort nil
                  :history nil
@@ -995,10 +959,20 @@ words will be updated.")
 
 (defvar paw-annotation-links-source
   (list
-   :name "Annotation Links"
+   :name "Paw Annotation Links"
    :narrow   ?l
    :items    (lambda()
-               (paw-candidates-format nil nil nil nil t) )
+               (paw-candidates-format :only-links t) )
+   :action   (lambda(cand)
+               (paw-list-default-action cand))))
+
+
+(defvar paw-annotation-source
+  (list
+   :name "Paw Annotations"
+   :narrow   ?p
+   :items    (lambda()
+               (paw-candidates-format :all t) )
    :action   (lambda(cand)
                (paw-list-default-action cand))))
 
@@ -1008,7 +982,7 @@ words will be updated.")
 (defun paw-list-all-links ()
   "List all eaf/eww links."
   (interactive)
-  (consult--read (paw-candidates-format nil nil nil nil t)
+  (consult--read (paw-candidates-format :only-links t)
                  :prompt "URL: "
                  :sort nil
                  :history 'paw-list-add-links-history
@@ -1141,7 +1115,7 @@ words will be updated.")
     ))
 
 
-(defun paw-candidates-by-mode (&optional whole-file sort current-buffer)
+(defun paw-candidates-by-mode (&optional sort current-buffer)
   "Match major modes and return the list of candidates.
 If WHOLE-FILE is t, always index the whole file."
   (if current-buffer
@@ -1158,15 +1132,17 @@ If WHOLE-FILE is t, always index the whole file."
                                    (paw-candidates-by-origin-path))
                             (paw-candidates-by-origin-path) ))
             (len (length candidates)))
-       (cons (if whole-file
-                 candidates
-               ;; filter current index candidates
-               (-filter (lambda (x)
-                          (let ((origin-point (alist-get 'origin_point x)))
-                            (cond ((listp origin-point)
-                                   (eq nov-documents-index (car origin-point)))
-                                  (t nil))))
-                        candidates) ) len)))
+       ;; TODO Disable of filter candidates by current index, since epub page is small, showing whole file's annotations is better.
+       ;; (cons (if whole-file
+       ;;           candidates
+       ;;         ;; filter current index candidates
+       ;;         (-filter (lambda (x)
+       ;;                    (let ((origin-point (alist-get 'origin_point x)))
+       ;;                      (cond ((listp origin-point)
+       ;;                             (eq nov-documents-index (car origin-point)))
+       ;;                            (t nil))))
+       ;;                  candidates) ) len)
+       (cons candidates len)))
     ('wallabag-mode
      (let* ((candidates (if sort
                             (-sort (lambda (ex ey)
@@ -1219,63 +1195,28 @@ If WHOLE-FILE is t, always index the whole file."
   )
   )
 
-(defun paw-candidates-format (&optional all whole-file sort current-buffer only-links)
+(defun paw-candidates-format (&rest properties)
   "Match major modes and return the list of formated candidates."
-  (-map
-   (lambda (entry)
-     (concat
-      (propertize (or (alist-get 'created_at entry) "") 'paw-entry entry)
-      "  "
-      (let* ((word (alist-get 'word entry))
-             (content (alist-get 'content entry))
-             (content-json (condition-case nil
-                               (let ((output (json-read-from-string content)))
-                                 (if (and (not (eq output nil))
-                                          (not (arrayp output))
-                                          (not (numberp output)))
-                                     output
-                                   nil))
-                             (error nil)))
-             (content-filename (or (alist-get 'filename content-json) ""))
-             (content-path (or (alist-get 'path content-json) ""))
-             (serverp (or (alist-get 'serverp content-json) 2))
-             (origin-path (alist-get 'origin_path entry))
-             (origin-point (alist-get 'origin_point entry))
-             (origin-type (alist-get 'origin_type entry))
-             (note-type (alist-get 'note_type entry)))
-        (concat
-         (paw-format-column
-          (paw-format-icon note-type content serverp origin-path)
-          2 :left)
-         "  "
-         (propertize (s-truncate 55 (paw-get-real-word word) ) 'face 'paw-offline-face)
-         "  "
-         (if (stringp origin-point)
-             origin-point
-           (if origin-path
-               (pcase origin-type
-                 ('wallabag-entry-mode
-                  (propertize origin-path 'face 'paw-wallabag-face))
-                 ('nov-mode
-                  (propertize (file-name-nondirectory origin-path) 'face 'paw-nov-face))
-                 ((or 'pdf-view-mode 'nov-mode "pdf-viewer")
-                  (propertize (file-name-nondirectory origin-path) 'face 'paw-pdf-face))
-                 ((or 'eaf-mode "browser" 'eww-mode)
-                  (propertize origin-path 'face 'paw-link-face))
-                 (_ (propertize (file-name-nondirectory origin-path ) 'face 'paw-file-face)))
-             ""))
-
-         ))
-      "  "
-      (s-collapse-whitespace (or (s-truncate 120 (alist-get 'note entry)) ""))) )
-   (cond (all ;; if all is t, return all candidates which is serverp equals 2
-          (-filter (lambda (entry)
-                     (eq (alist-get 'serverp entry) 2)) (paw-all-candidates)))
-
-         (only-links (paw-candidates-only-links))
-         ((derived-mode-p 'eaf-mode)
-          (car (paw-candidates-by-mode t)))
-         (t (car (paw-candidates-by-mode whole-file sort current-buffer))))))
+  (let ((all (plist-get properties :all))
+        (sort (plist-get properties :sort))
+        (current-buffer (plist-get properties :current-buffer))
+        (only-links (plist-get properties :only-links))
+        (print-full-content (plist-get properties :print-full-content))
+        (only-words (plist-get properties :only-words)))
+    (-map
+     (lambda (entry)
+       (paw-parse-entry-as-string entry print-full-content))
+     (cond (all
+            ;; if all is t, return all candidates which is serverp equals 2
+            ;; (-filter (lambda (entry)
+            ;;            (eq (alist-get 'serverp entry) 2)) (paw-all-candidates))
+            (paw-all-candidates)
+            )
+           (only-links (paw-candidates-only-links))
+           (only-words (paw-candidates-only-words))
+           ((derived-mode-p 'eaf-mode)
+            (car (paw-candidates-by-mode t)))
+           (t (car (paw-candidates-by-mode sort current-buffer))))) ))
 
 (defvar paw-annotation-mode-map
   (let ((map (make-sparse-keymap)))
@@ -1306,9 +1247,10 @@ If WHOLE-FILE is t, always index the whole file."
 (if (bound-and-true-p evil-mode)
     (evil-define-key* '(normal visual insert) paw-annotation-mode-map
       (kbd "s") 'paw-view-note-in-minibuffer
-      (kbd "t") 'paw-view-note-transalate
+      (kbd "t") 'paw-view-note-translate
       ;; (kbd "i") 'paw-add-highlight
       (kbd "a") 'paw-add-online-word
+      (kbd "m") 'paw-add-highlight
       (kbd "u") 'paw-scroll-down
       (kbd "d") 'paw-scroll-up
       (kbd "c") 'paw-view-note-current-thing
@@ -1322,15 +1264,20 @@ If WHOLE-FILE is t, always index the whole file."
       ;; (kbd "q") 'paw-view-note-quit
       ) )
 
-(defcustom paw-view-note-transalate-function 'paw-nov-translate
+(defcustom paw-view-note-translate-function 'paw-immersive-translate
   "paw view note translate function"
   :group 'paw
-  :type '(choice (function-item paw-view-note-transalate)
+  :type '(choice (function-item paw-nov-translate)
+          (function-item paw-immersive-translate)
           function))
 
-(defun paw-view-note-transalate ()
+(define-obsolete-variable-alias 'paw-view-note-transalate-function
+  'paw-view-note-translate-function "paw 1.1.1")
+
+
+(defun paw-view-note-translate ()
   (interactive)
-  (funcall paw-view-note-transalate-function))
+  (funcall paw-view-note-translate-function))
 
 
 (defcustom paw-view-note-click-function 'paw-click-to-view-note
@@ -1501,31 +1448,37 @@ is t."
       (setq-local minor-mode-map-alist
                   (cons (cons 'paw-annotation-mode paw-annotation-mode-map)
                         minor-mode-map-alist))
+      (pcase major-mode
+        ('eaf-mode
+         (eaf-call-async "execute_function_with_args" eaf--buffer-id "paw_annotation_mode" `,paw-db-file))
+        ('pdf-view-mode
+         ;; then update and show the mode line
+         (paw-annotation-get-mode-line-text)
+         (if (symbolp (car-safe mode-line-format))
+             (setq mode-line-format (list mode-line-segment mode-line-format))
+           (push mode-line-segment mode-line-format)))
+        (_
+         ;; show all annotations first
+         (paw-show-all-annotations)
 
-      (if (eq major-mode 'eaf-mode)
-          (eaf-call-async "execute_function_with_args" eaf--buffer-id "paw_annotation_mode" `,paw-db-file)
+         ;; show all words from wordlists
+         (if paw-annotation-show-wordlists-words-p
+             (paw-focus-find-words :wordlist t) )
 
-        ;; show all annotations first
-        (paw-show-all-annotations)
+         ;; show all unknown words
+         (if paw-annotation-show-unknown-words-p
+             (paw-focus-find-words))
 
-        ;; show all words from wordlists
-        (if paw-annotation-show-wordlists-words-p
-            (paw-focus-find-words :wordlist t) )
-
-        ;; show all unknown words
-        (if paw-annotation-show-unknown-words-p
-            (paw-focus-find-words))
-
-        ;; then update and show the mode line
-        (paw-annotation-get-mode-line-text)
-        (if (symbolp (car-safe mode-line-format))
-            (setq mode-line-format (list mode-line-segment mode-line-format))
-          (push mode-line-segment mode-line-format))
-        (unless (eq major-mode 'nov-mode)
-          (when paw-annotation-read-only-enable
-            ;; Save the original read-only state of the buffer
-            (setq paw-annotation-read-only buffer-read-only)
-            (read-only-mode 1)) ))
+         ;; then update and show the mode line
+         (paw-annotation-get-mode-line-text)
+         (if (symbolp (car-safe mode-line-format))
+             (setq mode-line-format (list mode-line-segment mode-line-format))
+           (push mode-line-segment mode-line-format))
+         (unless (eq major-mode 'nov-mode)
+           (when paw-annotation-read-only-enable
+             ;; Save the original read-only state of the buffer
+             (setq paw-annotation-read-only buffer-read-only)
+             (read-only-mode 1)))))
       (run-hooks 'paw-annotation-mode-hook))
      (t
       (setq-local minor-mode-map-alist
@@ -1533,7 +1486,8 @@ is t."
       (setq mode-line-format (delete mode-line-segment mode-line-format))
       (if (eq major-mode 'eaf-mode)
           (eaf-call-async "eval_function" eaf--buffer-id "paw_annotation_mode_disable" (key-description (this-command-keys-vector)))
-        (unless (eq major-mode 'nov-mode)
+        (unless (or (eq major-mode 'nov-mode)
+                    (eq major-mode 'pdf-view-mode))
           (when paw-annotation-read-only-enable
             ;; Restore the original read-only state of the buffer
             (setq buffer-read-only paw-annotation-read-only)) )
@@ -1654,7 +1608,7 @@ is t."
     paw-annotation-mode-line-text))
 
 (defun paw-annotation-get-mode-line-text ()
-  (let* ((number-of-notes (paw-candidates-by-origin-path-length)))
+  (let* ((number-of-notes (or (paw-candidates-by-origin-path-length) 0)))
     (setq-local paw-annotation-mode-line-text
                 (cond ((= number-of-notes 0) (propertize (format " 0 notes " number-of-notes) 'face 'paw-no-notes-exist-face))
                       ((= number-of-notes 1) (propertize (format " 1 note " number-of-notes) 'face 'paw-notes-exist-face))
@@ -1676,9 +1630,11 @@ Add NOTE and ENTRY as overlay properties."
        (pcase (alist-get 'serverp entry)
          (1 (overlay-put ov 'face 'paw-level-1-word-face))
          (3 (overlay-put ov 'face 'paw-unknown-word-face)
-            (when (string= (alist-get 'lang entry) "ja")
-              ;; seperate the word with space
-              (overlay-put ov 'after-string (propertize paw-annotation-after-string-space 'mouse-face nil))))
+            ;; FIXME This is a hack to show the space after the word, disabled because the overlays will be clear by immersive-translate
+            ;; (when (string= (alist-get 'lang entry) "ja")
+            ;;   ;; seperate the word with space
+            ;;   (overlay-put ov 'before-string (propertize paw-annotation-after-string-space 'mouse-face nil)))
+            )
          (4 (overlay-put ov 'face 'paw-level-2-word-face))
          (5 (overlay-put ov 'face 'paw-level-3-word-face))
          (6 (overlay-put ov 'face 'paw-level-4-word-face))

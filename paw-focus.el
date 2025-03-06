@@ -4,6 +4,8 @@
 (require 'paw-kagome)
 (require 'paw-ecdict)
 (require 'paw-jlpt)
+(require 'paw-jieba)
+(require 'paw-hsk)
 (require 'paw-note)
 (require 'paw-org)
 (require 'paw-svg)
@@ -62,6 +64,7 @@
          (lang_word (paw-remove-spaces-based-on-ascii-rate-return-cons thing))
          (lang (car lang_word))
          (new-thing (cdr lang_word))
+         (origin-point (paw-get-location))
          (paw-view-note-show-type 'buffer))
     ;; ;; delete the overlay, focus mode does not not need click overlay
     ;; (if paw-click-overlay
@@ -72,17 +75,17 @@
         (deactivate-mark))
     ;; (format "Analysing %s..." new-thing)
     (cond ((string= lang "en")
-           (paw-view-note (paw-new-entry new-thing :lang "en")
+           (paw-view-note (paw-new-entry new-thing :lang "en" :origin_point origin-point)
                           :no-pushp t ;; for better performance
                           :kagome (lambda(word _buffer) ;; FIXME buffer is not used
                                     (paw-ecdict-db-command word 'paw-focus-view-note-process-sentinel-english "SENTENCE"))))
           ((string= lang "ja")
-           (paw-view-note (paw-new-entry new-thing :lang "ja")
+           (paw-view-note (paw-new-entry new-thing :lang "ja"  :origin_point origin-point)
                           :no-pushp t ;; for better performance
                           :kagome (lambda(word _buffer) ;; FIXME buffer is not used
                                     (paw-kagome-command word 'paw-focus-view-note-process-sentinel-japanese))))
           ;; fallbck to normal `paw-view-note'
-          (t (paw-view-note (paw-new-entry new-thing :lang lang))))))
+          (t (paw-view-note (paw-new-entry new-thing :lang lang :origin_point origin-point))))))
 
 (defcustom paw-focus-buffer-max-size 40000
   "The maximum size of the buffer to be processed by
@@ -392,9 +395,11 @@ the argument."
                                                  (interactive)
                                                  (funcall paw-external-dictionary-function word))) "\n")
 
-                (paw-insert-and-make-overlay
-                 (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange "\n")
-                 'face 'org-block)
+                (let ((bg-color paw-view-note-background-color))
+                  (paw-insert-and-make-overlay
+                   (paw-ecdict-format-string phonetic translation definition collins oxford tag bnc frq exchange "\n")
+                   'face `(:background ,bg-color :extend t))
+                  (insert "\n"))
                 (insert "\n")
                 (if entry (push (car entry) candidates) ))))
 

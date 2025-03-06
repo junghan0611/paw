@@ -3,10 +3,8 @@
 (require 'paw-vars)
 (require 'svg-lib)
 (require 'dash)
-(ignore-errors
-  (require 'all-the-icons)
-  ;; (require 'icons-in-terminal)
-  )
+(require 'all-the-icons nil t)
+(require 'nerd-icons nil t)
 
 (defcustom paw-svg-enable nil
   "Enable SVG image buttons. If nil, will try to use PBM image buttons."
@@ -26,6 +24,18 @@
 
 (defcustom paw-all-the-icons-button-enable nil
   "Enable all the icon buttons. If nil, will use text buttons, used on paw-view-note-mode."
+  :type 'boolean
+  :group 'paw)
+
+
+(defcustom paw-nerd-icons-icon-enable nil
+  "Enable nerd icons icon. If nil, will use text icon, used on dashboard."
+  :type 'boolean
+  :group 'paw)
+
+
+(defcustom paw-nerd-icons-button-enable nil
+  "Enable nerd icon buttons. If nil, will use text buttons, used on paw-view-note-mode."
   :type 'boolean
   :group 'paw)
 
@@ -101,6 +111,15 @@
             ;; ("Rust Docs" "https://doc.rust-lang.org/std/?search=%s")
             )))
 
+(defvar paw-provider-chinese-url-alist
+  (append '(("Wiktionary(中)" "https://zh.wiktionary.org/wiki/%s")
+            )))
+
+(defcustom paw-provide-general-urls-p t
+  "Provide general Search URLS in `paw-view-note' buffer."
+  :group 'paw
+  :type 'boolean)
+
 (defvar paw-provider-general-url-alist
   (append '(("Google"            "https://google.com/search?q=%s")
             ("Google Translate"            "https://translate.google.com/#auto/zh-CN/%s")
@@ -132,7 +151,9 @@
          ('dark
           (svg-lib-icon "star-face" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :radius 0 :foreground "yellow" :background (face-attribute 'default :background)))))
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "star") "*")))
+       (all-the-icons-material "star"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-star") "*")))
 
 
 
@@ -145,7 +166,9 @@
          ('dark
           (svg-lib-icon "star" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :radius 0 :foreground "yellow" :background (face-attribute 'default :background)))))
    (if (and (fboundp 'all-the-icons-faicon) paw-all-the-icons-icon-enable)
-       (all-the-icons-faicon "book") "+")))
+       (all-the-icons-faicon "book"))
+   (if (and (fboundp 'nerd-icons-faicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-faicon "nf-fa-book") "+")))
 
 
 (defun paw-question-icon ()
@@ -157,7 +180,9 @@
          ('dark
           (svg-lib-icon "help" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "red" :background (face-attribute 'default :background)))))
    (if (and (fboundp 'all-the-icons-faicon) paw-all-the-icons-icon-enable)
-       (all-the-icons-faicon "question") "?")))
+       (all-the-icons-faicon "question"))
+   (if (and (fboundp 'nerd-icons-faicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-faicon "nf-fa-question") "?")))
 
 
 (defun paw-todo-icon ()
@@ -169,7 +194,9 @@
          ('dark
           (svg-lib-icon "checkbox-blank-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "check_box_outline_blank") "□")))
+       (all-the-icons-material "check_box_outline_blank"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-checkbox_blank_outline") "□")))
 
 
 (defun paw-done-icon ()
@@ -181,7 +208,9 @@
            ('dark
             (svg-lib-icon "checkbox-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
      (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-         (all-the-icons-material "done") "✓")))
+         (all-the-icons-material "done"))
+     (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+         (nerd-icons-mdicon "nf-md-checkbox_outline") "✓")))
 
 (defun paw-cancel-icon ()
   (or
@@ -192,7 +221,9 @@
          ('dark
           (svg-lib-icon "close-box-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "cancel") "✗")))
+       (all-the-icons-material "cancel"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-close_box_outline") "✗")))
 
 (defun paw-bookmark-icon ()
   (or
@@ -203,7 +234,9 @@
          ('dark
           (svg-lib-icon "bookmark-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "bookmark") "↪")))
+       (all-the-icons-material "bookmark"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-bookmark_outline") "↪")))
 
 (defun paw-file-link-icon ()
   (or
@@ -214,7 +247,9 @@
          ('dark
           (svg-lib-icon "file-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "link") "⟷")))
+       (all-the-icons-material "link"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-file_outline") "⟷")))
 
 (defun paw-url-link-icon ()
   (or
@@ -225,7 +260,9 @@
          ('dark
           (svg-lib-icon "link" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-faicon) paw-all-the-icons-icon-enable)
-       (all-the-icons-faicon "link") "➔")))
+       (all-the-icons-faicon "link"))
+   (if (and (fboundp 'nerd-icons-faicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-faicon "nf-fa-link") "➔")))
 
 (defun paw-annotation-link-icon ()
   (or
@@ -236,7 +273,9 @@
          ('dark
           (svg-lib-icon "open-in-new" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-octicon) paw-all-the-icons-icon-enable)
-       (all-the-icons-octicon "link") "❰")))
+       (all-the-icons-octicon "link"))
+   (if (and (fboundp 'nerd-icons-octicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-octicon "nf-oct-link") "❰")))
 
 (defun paw-attachment-icon ()
   (or
@@ -247,7 +286,9 @@
          ('dark
           (svg-lib-icon "paperclip" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-icon-enable)
-       (all-the-icons-material "attachment") "❱")))
+       (all-the-icons-material "attachment"))
+   (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-mdicon "nf-md-paperclip") "❱")))
 
 (defun paw-image-icon ()
   (or
@@ -258,7 +299,9 @@
          ('dark
           (svg-lib-icon "image-outline" nil :scale 1 :height (if (eq system-type 'windows-nt) 0.5 0.9) :margin (if (eq system-type 'windows-nt) -1 0) :padding 0 :stroke 0 :foreground "white" :background (face-attribute 'default :background)))) )
    (if (and (fboundp 'all-the-icons-faicon) paw-all-the-icons-icon-enable)
-       (all-the-icons-faicon "picture-o") "⟨")))
+       (all-the-icons-faicon "picture-o"))
+   (if (and (fboundp 'nerd-icons-faicon) paw-nerd-icons-icon-enable)
+       (nerd-icons-faicon "nf-fa-picture_o") "⟨")))
 
 
 (defun paw-play-source-button (&optional callback)
@@ -270,16 +313,17 @@
                           (define-key map (kbd "<return>") (or callback 'paw-play-source-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "playlist_play" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[▶]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-play-source-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-play-source-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[▶]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "playlist_play")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-playlist_play"))
+            callback
+            'paw-play-source-button-function))))
 
 (defvar paw-all-the-icons-button-v-adjust -0.11)
+(defvar paw-nerd-icons-button-v-adjust 0.11)
 
 (defun paw-play-source-button-function (&optional arg)
   (interactive)
@@ -294,14 +338,15 @@
                           (define-key map (kbd "<return>") (or callback 'paw-play-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "play_arrow" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[▶]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-play-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-play-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[▶]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "play_arrow")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-play"))
+
+            callback
+            'paw-play-button-function))))
 
 (defun paw-play-button-function (&optional arg)
   (interactive)
@@ -317,14 +362,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-return-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "keyboard_return" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[BACK]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-play-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-return-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[BACK]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "keyboard_return")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-keyboard_return"))
+            callback
+            'paw-return-button-function))))
 
 (defun paw-return-button-function (&optional arg)
   (interactive)
@@ -351,14 +396,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-change-word-learning-level))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "looks_one" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[1]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-change-word-learning-level-type
-                               'action (lambda (arg) (funcall (or callback 'paw-change-word-learning-level)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[1]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "looks_one")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-numeric_1"))
+            callback
+            'paw-change-word-learning-level))))
 
 (defun paw-level-2-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[numeric-2-circle-outline]" (or callback 'paw-change-word-learning-level)))
@@ -369,14 +414,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-change-word-learning-level))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "looks_two" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[2]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-change-word-learning-level-type
-                               'action (lambda (arg) (funcall (or callback 'paw-change-word-learning-level)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[2]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "looks_two")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-numeric_2"))
+            callback
+            'paw-change-word-learning-level))))
 
 (defun paw-level-3-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[numeric-3-circle-outline]" (or callback 'paw-change-word-learning-level)))
@@ -387,14 +432,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-change-word-learning-level))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "looks_3" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[3]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-change-word-learning-level-type
-                               'action (lambda (arg) (funcall (or callback 'paw-change-word-learning-level)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[3]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "looks_3")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-numeric_3"))
+            callback
+            'paw-change-word-learning-level))))
 
 (defun paw-level-4-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[numeric-4-circle-outline]" (or callback 'paw-change-word-learning-level)))
@@ -405,14 +450,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-change-word-learning-level))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "looks_4" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[4]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-change-word-learning-level-type
-                               'action (lambda (arg) (funcall (or callback 'paw-change-word-learning-level)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[4]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "looks_4")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-numeric_4"))
+            callback
+            'paw-change-word-learning-level))))
 
 (defun paw-level-5-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[check-circle-outline]" (or callback 'paw-change-word-learning-level)))
@@ -423,14 +468,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-change-word-learning-level))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "done" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[✓]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-change-word-learning-level-type
-                               'action (lambda (arg) (funcall (or callback 'paw-change-word-learning-level)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[✓]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "done")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-check"))
+            callback
+            'paw-change-word-learning-level))))
 
 (defun paw-share-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[share]" (or callback 'paw-share-button-function)))
@@ -441,14 +486,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-share-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "share" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-share-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-share-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[S]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "share")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-share"))
+            callback
+            'paw-share-button-function))))
 
 (defun paw-share-button-function (&optional arg)
   (interactive)
@@ -463,14 +508,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-prev-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "arrow_upward" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[Up]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-prev-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-prev-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[Up]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "arrow_upward")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-arrow_up"))
+            callback
+            'paw-prev-button-function))))
 
 (defun paw-prev-button-function (&optional arg)
   (interactive)
@@ -486,14 +531,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-next-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "arrow_downward" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[Down]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-next-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-next-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[Down]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "arrow_downward")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-arrow_down"))
+            callback
+            'paw-next-button-function))))
 
 (defun paw-next-button-function (&optional arg)
   (interactive)
@@ -509,22 +554,108 @@
                           (define-key map (kbd "<return>") (or callback 'paw-add-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "add" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[+]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-add-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-add-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[+]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "add")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-plus"))
+            callback
+            'paw-add-button-function))))
+
+(defvar paw-add-button-action-list '("word"
+                                     "word note"
+                                     "highlight"
+                                     "todo"
+                                     "done"
+                                     "cancel"
+                                     "question"
+                                     "link"
+                                     "bookmark"))
 
 (defun paw-add-button-function (&optional arg)
   (interactive)
-  (if paw-add-button-online-p
-      (let ((paw-add-online-word-without-asking nil)) ;; provide a way for user to input meaning, even if it is t
-        (funcall-interactively 'paw-add-online-word (paw-note-word)))
-    (let ((paw-add-offline-word-without-asking nil))
-      (funcall-interactively 'paw-add-offline-word (paw-note-word)))))
+  (let ((action (completing-read "Add this word/sentence/phrase as: " paw-add-button-action-list)))
+    (pcase action
+      ("word" (if paw-add-button-online-p
+                  (let ((paw-add-online-word-without-asking nil)) ;; provide a way for user to input meaning, even if it is t
+                    (funcall-interactively 'paw-add-online-word (paw-note-word)))
+                (let ((paw-add-offline-word-without-asking nil))
+                  (funcall-interactively 'paw-add-offline-word (paw-note-word)))))
+      ("word note" (paw-add-general
+                    (paw-note-word)
+                    (assoc 'word paw-note-type-alist)
+                    (alist-get 'origin_point paw-note-entry)
+                    arg
+                    (alist-get 'note paw-note-entry)
+                    (alist-get 'origin_path paw-note-entry)
+                    (alist-get 'origin_type paw-note-entry)))
+      ("highlight" (paw-add-general
+                    (paw-note-word)
+                    paw-annotation-current-highlight-type
+                    (alist-get 'origin_point paw-note-entry)
+                    arg
+                    (alist-get 'note paw-note-entry)
+                    (alist-get 'origin_path paw-note-entry)
+                    (alist-get 'origin_type paw-note-entry)))
+      ("todo" (paw-add-general
+               (paw-note-word)
+               (assoc 'todo paw-note-type-alist)
+               (alist-get 'origin_point paw-note-entry)
+               arg
+               (or (alist-get 'note paw-note-entry)
+                   (alist-get 'context paw-note-entry))
+               (alist-get 'origin_path paw-note-entry)
+               (alist-get 'origin_type paw-note-entry)))
+      ("done" (paw-add-general
+               (paw-note-word)
+               (assoc 'done paw-note-type-alist)
+               (alist-get 'origin_point paw-note-entry)
+               arg
+               (or (alist-get 'note paw-note-entry)
+                   (alist-get 'context paw-note-entry))
+               (alist-get 'origin_path paw-note-entry)
+               (alist-get 'origin_type paw-note-entry)))
+      ("cancel" (paw-add-general
+                 (paw-note-word)
+                 (assoc 'cancel paw-note-type-alist)
+                 (alist-get 'origin_point paw-note-entry)
+                 arg
+                 (or (alist-get 'note paw-note-entry)
+                     (alist-get 'context paw-note-entry))
+                 (alist-get 'origin_path paw-note-entry)
+                 (alist-get 'origin_type paw-note-entry)))
+      ("question" (paw-add-general
+                   (paw-note-word)
+                   (assoc 'question paw-note-type-alist)
+                   (alist-get 'origin_point paw-note-entry)
+                   arg
+                   (or (alist-get 'note paw-note-entry)
+                       (alist-get 'context paw-note-entry))
+                   (alist-get 'origin_path paw-note-entry)
+                   (alist-get 'origin_type paw-note-entry)))
+      ("link" (paw-add-general
+               (paw-note-word)
+               (assoc 'link paw-note-type-alist)
+               (alist-get 'origin_point paw-note-entry)
+               arg
+               (or (alist-get 'note paw-note-entry)
+                   (alist-get 'context paw-note-entry))
+               (alist-get 'origin_path paw-note-entry)
+               (alist-get 'origin_type paw-note-entry)))
+      ("bookmark" (paw-add-general
+                   (paw-note-word)
+                   (assoc 'bookmark paw-note-type-alist)
+                   (alist-get 'origin_point paw-note-entry)
+                   arg
+                   (or (alist-get 'note paw-note-entry)
+                       (alist-get 'context paw-note-entry))
+                   (alist-get 'origin_path paw-note-entry)
+                   (alist-get 'origin_type paw-note-entry)))
+      (_ (message "No action taken")))
+    ;; if action is inside paw-add-button-action-list
+    (when (member action paw-add-button-action-list)
+      (message "Added %s" action))))
 
 (defun paw-edit-button (&optional callback)
   (cond (paw-svg-enable (svg-lib-button "[pencil]" (or callback 'paw-edit-button-function)))
@@ -535,14 +666,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-edit-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "edit" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[E]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-edit-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-edit-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[E]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "create")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-note_edit_outline"))
+            callback
+            'paw-edit-button-function))))
 
 (defun paw-edit-button-function(&optional arg)
   (interactive)
@@ -564,14 +695,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-delete-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "delete" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[-]"))
-                             nil
-                             'type
-                             (define-button-type 'paw-delete-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-delete-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "[-]"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "delete")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-delete"))
+            callback
+            'paw-delete-button-function))))
 
 (defun paw-delete-button-function(&optional arg)
   (interactive)
@@ -606,14 +737,14 @@
                           (define-key map (kbd "<return>") (or callback 'paw-goldendict-button-function))
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "open_in_new" :v-adjust paw-all-the-icons-button-v-adjust) "<Goldendict>")
-                             nil
-                             'type
-                             (define-button-type 'paw-translate-button-type
-                               'action (lambda (arg) (funcall (or callback 'paw-goldendict-button-function)))
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "<Goldendict>"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "open_in_new")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-open_in_new"))
+            callback
+            'paw-goldendict-button-function))))
 
 (defun paw-goldendict-button-function (&optional arg)
   (interactive)
@@ -663,18 +794,30 @@
                           (define-key map (kbd "<return>") 'paw-translate-button-function)
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "translate" :v-adjust paw-all-the-icons-button-v-adjust) "<译>")
-                             nil
-                             'type
-                             (define-button-type 'paw-translate-button-type
-                               'action 'paw-translate-button-function
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "<译>"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "translate")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-google_translate"))
+            nil
+            'paw-translate-button-function))))
 
 (defun paw-translate-button-function (&optional arg)
   (interactive)
-  (funcall paw-translate-function (paw-get-real-word (paw-note-word))))
+  (let* ((section (org-no-properties (org-get-heading t t t t)))
+         (to-translate (cond ((string-prefix-p "Translation" section)
+                              (paw-get-real-word (paw-note-word)))
+                             ((string-prefix-p "Context" section)
+                              paw-note-context)
+                             ((string-prefix-p "Notes" section)
+                              (or paw-note-note (alist-get 'note (car (paw-candidate-by-word (paw-note-word)) ) )))
+                             (t (paw-get-real-word (paw-note-word))))))
+    (funcall paw-translate-function
+             to-translate
+             nil
+             (current-buffer)
+             section)))
 
 (defun paw-ai-translate-button ()
   (cond (paw-svg-enable (svg-lib-button "[ideogram-cjk-variant] AI译" 'paw-ai-translate-button-function))
@@ -685,26 +828,40 @@
                           (define-key map (kbd "<return>") 'paw-ai-translate-button-function)
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "language" :v-adjust paw-all-the-icons-button-v-adjust) "<AI译>")
-                             nil
-                             'type
-                             (define-button-type 'paw-ai-translate-button-type
-                               'action 'paw-ai-translate-button-function
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "<译>"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "language")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-translate"))
+            nil
+            'paw-ai-translate-button-function))))
 
 (defun paw-ai-translate-button-function (&optional arg)
   (interactive)
-  (let* ((word (paw-get-real-word (paw-note-word)))
-         (word (replace-regexp-in-string "^[ \n]+" "" word))
-         (note paw-note-note))
-    (funcall paw-ai-translate-function word
-             (or paw-gptel-ai-translate-prompt
-                 (format "Translate this word/sentence/phrase into %s: %s. It is used in: %s"
-                         paw-gptel-language
-                         word
-                         note)))))
+  (let* ((section (org-no-properties (org-get-heading t t t t)))
+         (to-translate (cond ((string-prefix-p "Translation" section)
+                              (replace-regexp-in-string "^[ \n]+" "" (paw-get-real-word (paw-note-word))))
+                             ((string-prefix-p "Context" section)
+                              paw-note-context)
+                             ((string-prefix-p "Notes" section)
+                              paw-note-note)
+                             (t (paw-get-real-word (paw-note-word)))))
+         (prompt (or paw-gptel-ai-translate-prompt
+                     (cond ((string-prefix-p "Translation" section)
+                            (format "Translate this word/sentence/phrase into %s: %s. It is used in: %s"
+                                    paw-gptel-language
+                                    to-translate
+                                    (or paw-note-note paw-note-context)))
+                           (t (format "Translate this word/sentence/phrase into %s: %s"
+                                      paw-gptel-language
+                                      to-translate))))))
+    (funcall paw-ai-translate-function
+             to-translate
+             prompt
+             nil
+             nil
+             section)))
 
 (defun paw-ask-ai-button ()
   (cond (paw-svg-enable (svg-lib-button "[chat-question] Ask AI" 'paw-ask-ai-button-function))
@@ -715,35 +872,66 @@
                           (define-key map (kbd "<return>") 'paw-ask-ai-button-function)
                           (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                             image-string)))
-        (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                 (all-the-icons-material "chat" :v-adjust paw-all-the-icons-button-v-adjust) "<Ask AI>")
-                             nil
-                             'type
-                             (define-button-type 'paw-ask-ai-button-type
-                               'action 'paw-ask-ai-button-function
-                               'face 'default
-                               'follow-link t)))))
+        (t (paw-make-text-button
+            "<Ask AI>"
+            (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                    "mic")
+                (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                    "nf-md-chat"))
+            nil
+            'paw-ask-ai-button-function))))
+
+(defcustom paw-ask-ai-prompt "I'm reading %s, we have the following highlighted text: %s, %s"
+  "The initial prompt for AI translation.
+The first %s is the context
+The second %s is the word
+The final %s is the question."
+  :group 'paw
+  :type 'string)
+
+(defcustom paw-ask-ai-question '("Answer it"
+                                 "Brainstorm ideas"
+                                 "Draft an outline"
+                                 "Draft anything"
+                                 "Draft an email"
+                                 "Draft a journal entry"
+                                 "Draft a meeting agenda"
+                                 "Explain in 12 words or less"
+                                 "Explain in 48 words or less"
+                                 "Explain in 100 words or less"
+                                 "Explain in 200 words or less"
+                                 "Summarize it"
+                                 "Translate it to Chinese"
+                                 "Write anything")
+  "The default question to ask AI."
+  :group 'paw
+  :type '(repeat string))
+
+(defcustom paw-ask-ai-defualt-question "Explain in 48 words or less"
+  "The default question to ask AI."
+  :group 'paw
+  :type 'string)
 
 (defun paw-ask-ai-button-function (&optional arg)
   (interactive)
   (let* ((word (paw-get-real-word (paw-note-word)))
          (word (replace-regexp-in-string "^[ \n]+" "" word)))
-    (funcall paw-ai-translate-function word
-             (or paw-gptel-ask-ai-prompt
-                 (format "I'm reading%s, I have a question about the following highlighted text: %s, %s"
-                         (if (buffer-live-p paw-note-target-buffer)
-                             (with-current-buffer paw-note-target-buffer
-                               (pcase major-mode
-                                 ('nov-mode
-                                  (format " in this book, author: %s, title: %s, published at %s"
-                                          (alist-get 'creator nov-metadata)
-                                          (alist-get 'title nov-metadata)
-                                          (alist-get 'date nov-metadata)))
-                                 ;; TODO support other modes
-                                 (_ "")))
-                           "")
-                         word
-                         (read-string "Ask AI: ")))) ))
+    (funcall paw-ask-ai-function
+             (format paw-ask-ai-prompt
+                     (if (buffer-live-p paw-note-target-buffer)
+                         (with-current-buffer paw-note-target-buffer
+                           (pcase major-mode
+                             ('nov-mode
+                              (format "in this book, author: %s, title: %s, published at %s"
+                                      (alist-get 'creator nov-metadata)
+                                      (alist-get 'title nov-metadata)
+                                      (alist-get 'date nov-metadata)))
+                             ;; TODO support other modes
+                             (_ (paw-get-note))))
+                       "")
+                     word
+                     (if paw-ask-ai-p paw-ask-ai-defualt-question
+                       (completing-read "Ask AI: " paw-ask-ai-question))))))
 
 
 
@@ -814,19 +1002,62 @@
   (funcall paw-dictionary-browse-function
            (if paw-svg-enable
                (car (assoc-default (let* ((mouse-point (save-excursion
-                                                     (mouse-set-point last-input-event)
-                                                     (point)))
-                                      (props (cdr (get-text-property mouse-point 'display)))
-                                      svg-data)
-                                 (when (eq (plist-get props :type) 'svg)
-                                   (setq svg-data (plist-get props :data))
-                                   (with-temp-buffer
-                                     (insert svg-data)
-                                     (goto-char (point-min))
-                                     (if (re-search-forward "<text.*?>\\s-*\\(.*?\\)</text>" nil t)
-                                         (match-string-no-properties 1)
-                                       "No text found in SVG data")))) (paw-provider-japanese-urls)))
+							 (mouse-set-point last-input-event)
+							 (point)))
+					  (props (cdr (get-text-property mouse-point 'display)))
+					  svg-data)
+                                     (when (eq (plist-get props :type) 'svg)
+                                       (setq svg-data (plist-get props :data))
+                                       (with-temp-buffer
+					 (insert svg-data)
+					 (goto-char (point-min))
+					 (if (re-search-forward "<text.*?>\\s-*\\(.*?\\)</text>" nil t)
+                                             (match-string-no-properties 1)
+					   "No text found in SVG data")))) (paw-provider-japanese-urls)))
              (car (assoc-default (button-label (button-at (point))) (paw-provider-japanese-urls))))))
+
+
+(defvar paw-provider-chinese-urls nil)
+(defun paw-provider-chinese-urls()
+  (setq paw-provider-chinese-urls
+        (cl-loop for paw-provider in paw-provider-chinese-url-alist collect
+                 (let* ((name (car paw-provider))
+                        (url (paw-provider-lookup (paw-note-word) (car paw-provider) paw-provider-chinese-url-alist)))
+                   (list name url) )) ))
+
+
+(define-button-type 'paw-chinese-web-button-type
+  'action 'paw-chinese-web-buttons-function
+  'face 'paw-button-active-face
+  'follow-link t)
+
+
+(defun paw-chinese-web-buttons ()
+  (cl-loop for url in paw-provider-chinese-url-alist collect
+           (if paw-svg-enable
+               (svg-lib-button
+                (format "[web] %s" (car url))
+                'paw-chinese-web-buttons-function)
+             (make-text-button (car url) nil 'type 'paw-chinese-web-button-type))))
+
+(defun paw-chinese-web-buttons-function (&optional arg)
+  (interactive)
+  (funcall paw-dictionary-browse-function
+           (if paw-svg-enable
+               (car (assoc-default (let* ((mouse-point (save-excursion
+							 (mouse-set-point last-input-event)
+							 (point)))
+					  (props (cdr (get-text-property mouse-point 'display)))
+					  svg-data)
+                                     (when (eq (plist-get props :type) 'svg)
+                                       (setq svg-data (plist-get props :data))
+                                       (with-temp-buffer
+					 (insert svg-data)
+					 (goto-char (point-min))
+					 (if (re-search-forward "<text.*?>\\s-*\\(.*?\\)</text>" nil t)
+                                             (match-string-no-properties 1)
+					   "No text found in SVG data")))) (paw-provider-chinese-urls)))
+             (car (assoc-default (button-label (button-at (point))) (paw-provider-chinese-urls))))))
 
 (defvar paw-provider-general-urls nil)
 (defun paw-provider-general-urls()
@@ -940,14 +1171,14 @@
                                (define-key map (kbd "<return>") (or callback ',(intern (format "paw-%s-web-left-button-function" language))))
                                (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                                  image-string)))
-             (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                      (all-the-icons-material "arrow_back" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[Left]"))
-                                  nil
-                                  'type
-                                  (define-button-type ',(intern (format "paw-%s-web-left-button-type" language))
-                                    'action (lambda (arg) (funcall (or callback ',(intern (format "paw-%s-web-left-button-function" language)))))
-                                    'face 'default
-                                    'follow-link t)))))
+             (t (paw-make-text-button
+                 "[Left]"
+                 (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                         "arrow_back")
+                     (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                         "nf-md-arrow_left"))
+                 callback
+                 ',(intern (format "paw-%s-web-left-button-function" language))))))
 
     (defun ,(intern (format "paw-%s-web-left-button-function" language)) (&optional arg)
        (interactive)
@@ -971,14 +1202,14 @@
                                (define-key map (kbd "<return>") (or callback ',(intern (format "paw-%s-web-right-button-function" language))))
                                (let ((image-string (propertize " " 'display image 'keymap map 'mouse-face 'highlight)))
                                  image-string)))
-             (t (make-text-button (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
-                                      (all-the-icons-material "arrow_forward" :v-adjust paw-all-the-icons-button-v-adjust) (format  "[Right]"))
-                                  nil
-                                  'type
-                                  (define-button-type ',(intern (format "paw-%s-web-right-button-type" language))
-                                    'action (lambda (arg) (funcall (or callback ',(intern (format "paw-%s-web-right-button-function" language)))))
-                                    'face 'default
-                                    'follow-link t)))))
+             (t (paw-make-text-button
+                 "[Right]"
+                 (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                         "arrow_forward")
+                     (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                         "nf-md-arrow_right"))
+                 callback
+                 ',(intern (format "paw-%s-web-right-button-function" language))))))
 
     (defun ,(intern (format "paw-%s-web-right-button-function" language)) (&optional arg)
        (interactive)
@@ -996,8 +1227,22 @@
 )
   )
 
+(defun paw-make-text-button (text icon-name callback alternative)
+  (make-text-button (propertize text 'display
+                                (or (if (and (fboundp 'all-the-icons-material) paw-all-the-icons-button-enable)
+                                        (all-the-icons-material icon-name :v-adjust paw-all-the-icons-button-v-adjust))
+                                    (if (and (fboundp 'nerd-icons-mdicon) paw-nerd-icons-icon-enable)
+                                        (nerd-icons-mdicon icon-name :v-adjust paw-nerd-icons-button-v-adjust) text)))
+                    nil
+                    'type
+                    (define-button-type (intern (format "paw-%s-type" icon-name))
+                      'action (lambda (arg) (funcall (or callback alternative)))
+                      'face 'default
+                      'follow-link t)))
+
 (paw-web-buttons "english")
 (paw-web-buttons "japanese")
+(paw-web-buttons "chinese")
 (paw-web-buttons "general")
 
 
@@ -1039,6 +1284,7 @@
 (defvar paw-ask-ai-button (paw-ask-ai-button))
 (defvar paw-english-web-buttons (paw-english-web-buttons))
 (defvar paw-japanese-web-buttons (paw-japanese-web-buttons))
+(defvar paw-chinese-web-buttons (paw-chinese-web-buttons))
 (defvar paw-general-web-buttons (paw-general-web-buttons))
 
 

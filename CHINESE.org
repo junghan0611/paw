@@ -1,0 +1,52 @@
+#+title: Chinese configuration
+** Segmentation 
+Sentence segmentation is performed by [[https://github.com/kisaragi-hiu/emacs-jieba][emacs-jieba]]. The Emacs package will install the rust dependencies when installed.
+#+begin_src emacs-lisp
+(require 'jieba)
+#+end_src
+
+** Download HSK word lists
+You can check if HSK word lists can be found in =paw-hsk-dir=. If they can't be found, then they will be downloaded
+
+=M-x paw-hsk-update-word-lists=
+
+This function will download any necessary files and make the necessary list =paw-hsk-easy-words= that is used to determine which words should be hidden when using =paw-view-note=.
+
+** Sample configuration
+#+begin_src emacs-lisp
+  (use-package paw
+    :straight (:local-repo "~/code/elisp/paw")
+    :init (require 'paw-hsk)
+    (require 'paw-jieba)
+    (paw-hsk-update-word-lists)
+    :custom
+    (paw-non-ascii-word-separator "⁣") ;; Invisible separator character
+    (paw-non-ascii-language "zh")
+
+    (paw-go-translate-langs '(en zh))
+
+    (paw-offline-studylist '(("Chinese Studylist" ;; studylist name when choosing offline studylist
+			      (id . "1") ;; random id for internal use, but it could not be the same as any id in online study list defined in `paw-studylist'
+			      (language . "zh") ;; language of the studylist
+			      (name . "Chinese")) ;; name of the studylist
+			     ))
+
+    (paw-search-function #'paw-chinese-search-function)
+    (paw-chinese-sdcv-exact-match t)
+    (paw-hsk-levels-to-highlight "hsk6 hsk7-to-9"))
+#+end_src
+
+** Use Org CC-Cedict dictionary
+[[https://github.com/jiewawa/org-cc-cedict][Org CC-CEDICT]] is a special sdcv dictionary designed to take advantage of Org-Mode Features.
+
+It restyles CC-CEDICT dictionary entries and uses custom Org-Mode links to display characters with highlighting based on its tone,
+#+begin_src shell
+  git clone https://github.com/jiewawa/org-cc-cedict.git
+  cd org-cc-cedict
+  python main.py PATH-TO-CC-CEDICT-FILE
+#+end_src
+
+#+begin_src emacs-lisp
+  (setq paw-view-note-meaning-src-lang "org")
+  (setq paw-sdcv-dictionary-list '("Org CC-Cedict"))
+#+end_src

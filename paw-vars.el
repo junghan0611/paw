@@ -41,13 +41,6 @@ You can get the word with function `paw-note-word', and compose the prompt with 
   :type 'string
   :group 'paw)
 
-(defcustom paw-gptel-ask-ai-prompt nil
-  "The prompt to ask ai in gptel. If not set, will use the default prompt.
-You can get the word with function `paw-note-word', and compose the prompt with it."
-  :type 'string
-  :group 'paw)
-
-
 (defcustom paw-annotation-search-paths '()
   "Alternative pathes for paw-annotation-mode. The books pathes
  that are possibly used for paw-annotation-mode."
@@ -71,5 +64,24 @@ You can get the word with function `paw-note-word', and compose the prompt with 
     (link . "🔗")
     (sdcv . "✎"))
   "Const annotation types and their characters or faces.")
+
+(defcustom paw-ask-ai-p nil
+  "ask ai automatically"
+  :group 'paw
+  :type 'boolean)
+
+(defcustom paw-ai-translate-p nil
+  "Transalate the word with ai automatically"
+  :group 'paw
+  :type 'boolean)
+
+(defcustom paw-ai-translate-context-p nil
+  "Translate context with ai automatically"
+  :group 'paw
+  :type 'boolean)
+
+(defvar paw-cli-program (or (executable-find "paw")
+                             (concat (file-name-directory load-file-name) "paw/cli.py") )
+  "Path to emacs paw command line program.")
 
 (provide 'paw-vars)

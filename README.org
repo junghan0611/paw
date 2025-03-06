@@ -1,7 +1,6 @@
 #+title: paw (point-and-write)
 
-#+attr_org: :width 200px
-[[file:images/logo.jpg]]
+#+html: <img src="images/logo.jpg" width="256" height="256">
 
 Study for a life in Emacs.
 
@@ -10,7 +9,7 @@ Study for a life in Emacs.
 paw relies on sqlite. All annotations are saved inside a database, which means it can be easily backup and you can read and make annotation right inside Emacs (PC/mobile) using same database.
 
 paw is not just a dictionary tool. paw was created in mind that:
-1. Query word as easy as possible, even no need to click.
+1. Query word with single mouse click, even no need to click.
 2. Save and trace all known/unknown words and wordlist support, online or offline.
 3. Integrate with other great open source tools, libraries, and dictionaries.
 4. Integrate with external dictionary tools.
@@ -31,12 +30,13 @@ This package is mainly used along with:
 4. eww-mode
 5. wallabag-entry-mode
 6. pdf-view-mode
+7. elfeed-show-entry-mode
+8. [[Browser support]]
 
 But it is able to work with all modes (defined in ~paw-annotation-mode-supported-modes~) in Emacs.
 
-I'll update the doc in the future, there are too much to cover. But I'll show you the most useful cases first:
-
-* Reading and annotation
+* What can paw do?
+** Reading and annotation
 1. Open an epub file using nov.el or open an org file or browse web with eww
 2. Enable ~paw-annotation-mode~ (buffer will be turned into read-only if
    ~paw-annotation-read-only-enable~ is t to avoid accidental alternation)
@@ -48,7 +48,7 @@ I'll update the doc in the future, there are too much to cover. But I'll show yo
    annotation, press ~i~, ~paw-find-note~. It will create an temporary org file
    dedicated for this annotation, then save by ~C-c C-c~, changes will be saved in
    the database respectively.
-5. Call ~paw~, ~paw-list-all-annotations~ or ~paw-list-all-links~ to manage or jump to
+5. Call ~paw~, ~paw-list-annotations~, ~paw-list-all-annotations~ or ~paw-list-all-links~ to manage or jump to
    annotation location (One useful case is that make highlight or create
    bookmark on ~eww~, and jump back to the exact same annotation location simply
    pressing Enter)
@@ -59,8 +59,7 @@ I'll update the doc in the future, there are too much to cover. But I'll show yo
    org file.
 7. ~paw-add-bookmark~ works great on eww-mode/eaf-mode (browser or pdf-viewer)
 
-
-* Language Learning
+** Language Learning
 1. Copy a text you want to learn to an org file or browse a page with eww.
 2. Enable ~paw-annotation-mode~
 3. Click/Select word/sentence with ~paw-view-note~, it will show you an
@@ -87,7 +86,7 @@ I'll update the doc in the future, there are too much to cover. But I'll show yo
    ~paw-level-1-offline-word-face~ to ~paw-level-4-offline-word-face~ for offline
    words, while 5 is considered as Known word, skipping adding overlay face
    (just hiding). You can change the word to level 5 while keep it hiding, but
-   if you don't need it anymore, simply run ~paw-delete-word~ to delete it.
+   if you don't need it anymore, simply run =paw-delete-annotation= to delete it.
 9. Click/Select word/sentence with ~paw-view-note-current-thing~,
    ~paw-view-note-next-thing~, ~paw-view-note-prev-thing~, it will do segmentation
    using [[https://github.com/ikawaha/kagome][kagome]] (Japanese), and [[https://github.com/skywind3000/ECDICT][ECDICT]] (English).
@@ -103,39 +102,134 @@ Tip: Find some interesting contents on LingQ, and browse using eww, enable
 
 
 
-* Search a word/sentence
+** Search a word/sentence
 1. Select/Under a word/sentence
 2. Run ~paw-view-note~ (no segmentation, good for word) or
    ~paw-view-note-current-thing~ (segmentation, good for sentence)
 3. Optimized for eaf-mode, nov-mode, eww-mode, focus-mode
 
+
 * Installation
-Please install [[https://github.com/Dushistov/sdcv][sdcv]], [[https://github.com/ikawaha/kagome][kagome]] (For Japanese segmentation), [[https://github.com/skywind3000/ECDICT][ecdict]](for English
-learning), [[https://github.com/larstvei/Focus][focus]], [[https://github.com/rany2/edge-tts/][edge-tts]] (pronunciation), [[https://github.com/karthink/gptel][gptel]], [[https://github.com/lorniu/go-translate][go-translate]], [[https://github.com/goldendict/goldendict][goldendict]], If
-you want to make use all power of it.
+You should install the following Dependencies if you want to make use all the power of paw:
 
-You may also need to install [[https://github.com/chenyanming/shrface][shrface]], [[https://github.com/chenyanming/wallabag.el][wallabag]], [[https://github.com/emacs-eaf/emacs-application-framework][eaf]], [[https://github.com/manateelazycat/popweb][popweb]], pdf-tools, and more
-(Please check the source code what are missing, I'll organize them better in the
-future.)
+- Command line tools
+  - [[https://github.com/Dushistov/sdcv][sdcv]] (external dictionary)
+  - mpv (or other command line mp3 player)
+  - [[https://github.com/goldendict/goldendict][goldendict]] (external dictionary)
+  - [[https://github.com/rany2/edge-tts/][edge-tts]] (pronunciation)
+  - [[https://github.com/ikawaha/kagome][kagome]] (For Japanese segmentation, and word detection when click)
 
-** Install paw
+- python dependencies (install paw command line by ~pip install emacs-paw~ or one by one manually):
+  - Python itself (3.10+, for mac 3.11+)
+  - nltk
+  - flask
+  - flask-cors
+  - requests
+  - mecab-python3 
+  - unidic-lite
+
+- Language detection python dependencies (Please install one by one manually):
+  - pycld2 or gcld3
+
+- Emacs packages (Not all are needed, some are optional, but paw just supports them. Some needed packages will be installed along with paw):
+  - [[https://github.com/lorniu/go-translate][go-translate]] (Needed, for online transalation)
+  - [[https://github.com/karthink/gptel][gptel]] (Needed, for ai translation)
+  - emacsql (Needed)
+  - [[https://github.com/manateelazycat/sdcv][sdcv]] (Needed)
+  - [[https://github.com/larstvei/Focus][focus]]
+  - svg-lib
+  - anki-eidtor
+  - all-the-icons
+  - nerd-icons
+  - immersive-translate
+  - ivy
+  - consult
+  - posframe
+  - jieba
+  - eldoc-box
+  - evil
+  - esxml
+  - [[https://github.com/chenyanming/shrface][shrface]]
+  - [[https://github.com/chenyanming/wallabag.el][wallabag]]
+  - [[https://github.com/emacs-eaf/emacs-application-framework][eaf]]
+  - [[https://github.com/manateelazycat/popweb][popweb]]
+  - pdf-tools
+  - elfeed
+
+- Offline Dictionary:
+  - [[https://sourceforge.net/projects/stardict-4/][stardict]] dictionaries (Used by sdcv)
+  - [[https://github.com/skywind3000/ECDICT][ECDICT]] (Please go into the page and download the stardict.db)
+  - [[https://github.com/chenyanming/yomichan-jlpt-vocab][yomichan-jlpt-vocab]] (Please go into the page, clone the repo, and build the japanese.db by yourself)
+  - text/csv dictionaries (Not provided by this project, you can easily convert the Anki Deck into csv format and use them. Also, this project also provides some functions to download, check paw-util.el)
+
+Five steps:
+1. Install Offline Dictionaries (See above)
+2. Install Python
+        #+begin_src sh 
+        brew install python # You can use pyenv or other tools to install python
+        #+end_src
+3. Install [[https://pypi.org/project/emacs-paw/][emacs-paw]] command line by the following command, check usage at [[file:README_PAW_CLI.md][README_PAW_CLI]]
+        #+begin_src sh
+        pip install emacs-paw
+        #+end_src
+4-1. Please be patient... run the following command lines, you may need to adjust them based on your system, take mac for example:
+        #+begin_src sh
+        brew install sdcv
+        brew install mpv
+        pip install edge-tts
+        # Language Detection
+        pip install pycld2 # install gcld3 on mac is difficult...
+        # English
+        pip install nltk # not needed if install by pip install emacs-paw
+        python -m nltk.downloader stopwords
+        python -m nltk.downloader punkt
+        python -m nltk.downloader punkt_tab
+        # Japanese
+        pip install mecab-python3 unidic-lite # not needed if install by pip install emacs-paw
+        # paw-server, for mac, please install python 3.11, 3.10 may have segementation fault issue
+        pip install flask flask-cors requests # not needed if install by pip install emacs-paw
+        #+end_src
+4-2. For android install:
+        #+begin_src sh
+        pkg install tur-repo # https://github.com/termux-user-repository/tur
+        pkg install python3.10 # install python 3.10 (newer versions may not work at the time of writing)
+        apt update
+        apt install protobuf
+        pip3.10 install gcld3 
+        pip3.10 install flask flask-cors requests # not needed if install by pip install emacs-paw
+        #+end_src
+
+Finally, Install paw.el
 #+begin_src emacs-lisp
 (package! paw :recipe (:host github :repo "chenyanming/paw" :files ("*")))
 #+end_src
 
-** Language Detection
+* Configuration
+** Configure paw.el
+After installing the above Dependencies, you can configure paw like [[file:config.el][config.el]] (which I may update frequently based on my need). You should better copy to your own configurations and tweak it based on your need.
+
+Please note that csv dictionaries are not provided in this project, you can convert from [[https://ankiweb.net/shared/decks][Anki Decks]] or Make your own, it is just text based dictionaries.
+
+You can also check the language specific configurations below:
+- [[file:ENGLISH.org][English Configuration]]
+- [[file:JAPANESE.org][Japanese Configuration]]
+- [[file:CHINESE.org][Chinese Configuration]]
+
+** Sound engines
+Paw includes multiple sound engines that can be used to download audio files. The available sound engines include:
+- ~paw-say-word-cambridge~
+- ~paw-say-word-oxford~
+- ~paw-say-word-jpod101-alternate~
+- ~paw-edge-tts-say-word~
+- ~paw-youdao-say-word~
+- ~paw-say-word-forvo~
+- and more
+By default, the sequence in which these sound engines are used is defined by ~paw-say-word-functions~. 
+
+** Configure Language Detection
 Set ~paw-detect-language-p~ to t, and run ~pip install gcld3~, paw will use gcld3
 (may use others tools in the future, check ~paw-detect-language-program~) to
 detect the language for more accurate tts pronunciation and translation.
-
-For android install:
-#+begin_src sh
-pkg install tur-repo # https://github.com/termux-user-repository/tur
-pkg install python3.10 # install python 3.10 (newer versions may not work at the time of writing)
-apt update
-apt install protobuf
-pip3.10 install gcld3
-#+end_src
 
 If you don't want to use language detection program, paw use simple ascii rate:
 ~paw-ascii-rate~ to detect the language, if the rate is greater than
@@ -156,7 +250,20 @@ Supported edge-tts voice:
 - Other languages: ~paw-tts-multilingual-voice~
 Welcome PRs to add more languages :)
 
-** Anki Integration
+** =*paw-view-note*= window configurations
+If ~paw-view-note-window-auto-adjust~ is t (default), the window of
+=*paw-view-note*= will be automatically adjusted. If the height of the window is
+larger than the width, show it on the ~paw-view-note-vertical-position~, otherwise
+show it on the ~paw-view-note-horizontal-position~. Also, the windows width/height
+could be configured by ~paw-view-note-window-width~ and
+~paw-view-note-window-height~.
+
+** Back to original buffer
+Normally, when you run ~paw-view-note~, paw will switch to =*paw-view-note*= buffer. But there are some cases we want to stay at the original buffer, in this case:
+- Set ~paw-view-note-back-to-original-buffer~ as t (Default)
+- And add or remove the targeted major-mode into ~paw-view-note-back-to-original-buffer-supported-modes~.
+
+** Configure Anki Integration
 1. PC: Install Anki.
 2. PC: Install AnkiConnect, add-on code: 2055492159.
 3. Android: Install AnkiDroid from F-Driod (We need it has full media access
@@ -204,163 +311,134 @@ Same file name under ~paw-annotation-search-paths~ is also considerred same
 origin path.
 
 Other templates:
-[[https://forums.ankiweb.net/t/memrise-card-template-support-thread/34233/18][MemCloze.apkg]]
+- [[https://forums.ankiweb.net/t/memrise-card-template-support-thread/34233/18][MemCloze.apkg]]
+- Anime Mining: https://github.com/friedrich-de/Basic-Mining-Deck
 
-** Eudic Integration
+The audio file is automatically downloaded and added to the anki note, if ~paw-anki-download-sound~ is t (default). The sound file download sequence are defined by ~paw-anki-download-sound-functions~.
+
+** Configure Eudic Integration
 1. Apply Authorization key on https://my.eudic.net/OpenAPI/Authorization, and fill it into ~paw-authorization-keys~ before adding online words.
 2. Configure ~paw-online-word-servers~, =(setq paw-online-word-servers '(eudic))= to enable Eudic server, or =(setq paw-online-word-servers '(eudic anki))= to enable both eudic and anki servers.
 
 PS:
 Only online words can be added into Eudic. Mainly via command ~paw-add-online-word~
 
-** EAF Integration
-Use my fork: https://github.com/chenyanming/eaf-browser which adds paw support.
+** Configure EAF Integration
+Use my forks which add paw support.
+- https://github.com/chenyanming/eaf-browser: Able to highlight all words in the database in the page, click to search word and show in paw-view-note buffer.
+- https://github.com/chenyanming/eaf-pdf-viewer: Able to search the word under cursor by pressing one key (no need to select the word) and translate the sourrounded sentence, show in paw-view-note buffer.
+
+Add the following bindings to your configuration:
+#+begin_src emacs-lisp
+(eaf-bind-key insert_or_paw_view_note_in_eaf "s" eaf-browser-keybinding)
+(eaf-bind-key paw_view_note_in_eaf "s" eaf-pdf-viewer-keybinding)
+#+end_src
+
+** Browser support
+*** Browser Extension
+1. Firefox & Firefox Android https://addons.mozilla.org/en-US/firefox/addon/emacs-paw
+2. Chrome: https://chromewebstore.google.com/detail/paw/ofhodjclfalelhgjbfmdddekoghamlge
+3. Brave: Same as Chrome, but need to add ~@@||localhost^~ into ~Create custom filters section~ of ~brave://settings/shields/filters~ if you need paw-server features.
+3. This browser extension enhances word interaction by underlining words on mouseover and capturing context when words are clicked. The captured information is sent to Emacs via org-protocol and displayed in the *paw-view-note* buffer.
+4. Update the server config inside the config page of the extension, and make sure the port number (~paw-server-port~) matches, for example, http://localhost:5001
+5. M-x ~paw-server~. Run the paw-server, so that all words can be highlighted on browser.
+6. paw-server is optional, you don't need to run it, and still able to use the org-protocol feature. If you installed paw command line, you can also run paw-server by
+        #+begin_src sh
+        paw run_server --database /home/damonchan/org/paw.sqlite --save-dir /tmp/ --port 5001 --wallabag-host https://example.com --wallabag-username username --wallabag-password password --wallabag-clientid clientid --wallabag-secret secret
+        #+end_src
+
+#+attr_org: :width 1000px
+[[file:images/_20250112_161934screenshot.png]]
 
 
-** [[file:ENGLISH.org][English Configuration]]
-** [[file:JAPANESE.org][Japanese Configuration]]
+#+attr_org: :width 300px
+[[file:images/_20250112_162205screenshot.png]]
+
+
+#+attr_org: :width 100px
+[[file:images/_20250112_162133screenshot.png]]
+
+
+*** org-protocol
+Add a bookmarklet in browser, paste the following code as URL:
+#+begin_src js
+javascript:(function(){
+    var selection = window.getSelection().toString();
+    if (selection.length > 0) {
+        var url = encodeURIComponent(window.location.href);
+        var title = encodeURIComponent(document.title || "[untitled page]");
+        var body = encodeURIComponent(selection);
+        var parent = window.getSelection().getRangeAt(0).commonAncestorContainer.parentNode;
+        while (parent.nodeType !== Node.ELEMENT_NODE) {
+            parent = parent.parentNode;
+        }
+        var p_tag_parent = parent;
+        while (p_tag_parent.tagName !== undefined && p_tag_parent.tagName !== 'P') {
+            p_tag_parent = p_tag_parent.parentNode;
+        }
+        if (p_tag_parent !== document) {
+            parent = p_tag_parent;
+        }
+        var note = encodeURIComponent(parent.textContent || "");
+        location.href = 'org-protocol://paw?template=w&url=' + url + '&title=' + title + '&note=' + note + '&body=' + body;
+    }
+}());
+#+end_src
+Select the word, and click the bookmark, the word will be shown in paw-view-note buffer.
+
+** Coding
+You can show anything on ~*paw-view-note*~ buffer!
+
+For example, the following snippet shows the gptel result to ~*paw-view-note*~ buffer by using ~paw-view-note~ and ~paw-new-entry~ functions, use edge-tts to say the response out, use go-translate to transalte the response, also user can further interact (add to database etc) with the result in ~*paw-view-note*~ buffer.
+#+begin_src emacs-lisp
+(defun gptel-quick (&optional query)
+  "ASK AI with predefined prompts."
+  (interactive)
+  (require 'gptel)
+  (let* ((selected-text (when (use-region-p)
+                          (buffer-substring-no-properties (region-beginning) (region-end))))
+         ;; (current-buffer-text (buffer-substring-no-properties (point-min) (point-max)))
+         (additional-text (or selected-text ""))
+         (prompt (completing-read "Ask AI: "
+                                  '("Draft an outline"
+                                    "Draft anything"
+                                    "Draft an email"
+                                    "Draft a journal entry"
+                                    "Draft a meeting agenda"
+                                    "Explain in 12 words or less"
+                                    "Explain in 48 words or less"
+                                    "Explain in 100 words or less"
+                                    "Explain in 200 words or less"
+                                    "Write anything"
+                                    "Brainstorm ideas"
+                                    "Translate it to Chinese"))))
+    (when (string= prompt "") (user-error "A prompt is required."))
+    (deactivate-mark)
+    (setq gptel-last-prompt (format "%s. %s" prompt additional-text))
+    (gptel-request (or query gptel-last-prompt)
+      :system "You are an AI assistant that lives inside Emacs"
+      :callback
+      (lambda (response info)
+        (if (not response)
+            (message "gptel-quick failed with message: %s" (plist-get info :status))
+          (with-current-buffer (get-buffer-create "*gptel-quick*")
+            (let ((paw-say-word-p t) ;; say the response out
+                  (lang (paw-check-language response)))
+              (paw-view-note (paw-new-entry response
+                                            :origin_type "gptel"
+                                            :serverp 3
+                                            :lang lang
+                                            :context (format "Question: %s\nAnswer: %s" gptel-last-prompt response))
+                             :buffer-name paw-view-note-buffer-name
+                             :display-func 'switch-to-buffer))))))))
+#+end_src
 
 * Database Synchronization
 I personally use [[https://syncthing.net/][Syncting]] to share the database between PC and Android. The
 drawback is that, if the database is in used in any party, the synchronization
-will stop. You can run ~paw-db-sync~ to close the connection with the database or
-close Emacs directly before Synchronization.
+will stop. You can run ~paw-db-sync~ to close the connection with the database, or
+run =paw= then =paw-quit=, or close Emacs directly before Synchronization.
 
-* My Setup
-#+begin_src emacs-lisp
-
-(use-package paw
-  :init
-  (setq paw-db-file (expand-file-name "paw.sqlite" org-directory))
-  ;; ecdict dictionary
-  (setq paw-ecdict-db (expand-file-name "stardict.db" org-directory))
-  ;; setup ECDICT before using it, and create the files manually if not exist
-  (setq paw-ecdict-wordlist-files `(
-                                    ,(expand-file-name "美国当代英语语料库.csv" org-directory) ;; https://www.eapfoundation.com/vocab/academic/other/mawl/
-                                    ,(expand-file-name "mawl.csv" org-directory) ;; https://www.eapfoundation.com/vocab/academic/other/mawl/
-                                    ,(expand-file-name "opal.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
-                                    ,(expand-file-name "5000.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
-                                    ,(expand-file-name "极品GRE红宝书.csv" org-directory)
-                                    ,(expand-file-name "gre.txt" org-directory)
-                                    ,(expand-file-name "托福绿宝书.csv" org-directory)
-                                    ,(expand-file-name "2021_Teachers_AcademicCollocationList.csv" org-directory) ;; https://www.pearsonpte.com/teachers/academic-collocation
-                                    ,(expand-file-name "The Unofficial Harry Potter Vocabulary Builder.csv" org-directory)
-                                    ,(expand-file-name "Illustrated Everyday Expressions with Stories.csv" org-directory)
-                                    ,(expand-file-name "Essential Idioms in English.csv" org-directory)
-                                    ,(expand-file-name "idioms.txt" org-directory)
-                                    ,(expand-file-name "phrase-list.csv" org-directory) ;; https://www.oxfordlearnersdictionaries.com/wordlists/
-                                    ,(expand-file-name "英语生词本.csv" org-directory)
-                                    ))
-  ;; setup ECDICT before using it, and create the files manually if not exist
-  (setq paw-ecdict-known-words-files `(,(expand-file-name "eudic.csv" org-directory)
-                                       ,(expand-file-name "english.txt" org-directory)))
-  ;; setup ECDICT before using it, and create the file manually if not exists
-  (setq paw-ecdict-default-known-words-file (expand-file-name "english.txt" org-directory))
-
-  ;; jlpt dictionary
-  (setq paw-jlpt-db (expand-file-name "japanese.db" org-directory))
-  ;; setup jlpt before using it, and create the files manually if not exist
-  (setq paw-jlpt-wordlist-files `(,(expand-file-name "日语生词本.csv" org-directory)
-                                  ,(expand-file-name "日本语红宝书.csv" org-directory)
-                                  ,(expand-file-name "蓝宝书日语文法.csv" org-directory)
-                                  ,(expand-file-name "NEW-JLPT.csv" org-directory)
-                                    ))
-  ;; setup jlpt before using it, and create the files manually if not exist
-  (setq paw-jlpt-known-words-files `(,(expand-file-name "japanese.txt" org-directory)))
-  ;; setup jlpt before using it, and create the file manually if not exists
-  (setq paw-jlpt-default-known-words-file (expand-file-name "japanese.txt" org-directory))
-  :custom
-  ;; (paw-svg-enable t)
-  ;; Use pbm buttons on android
-  (paw-pbm-enable (if (eq system-type 'android) t))
-  ;; Use all the icons icon on dashboard
-  (paw-all-the-icons-icon-enable t)
-  ;; Use all the icons button on non-android system
-  (paw-all-the-icons-button-enable (unless (eq system-type 'android) t))
-  (paw-detect-language-p t)
-  (paw-python-program (if (string-equal system-type "android") "python3.10" "python3"))
-  (paw-detect-language-program 'gcld3) ;; android can only install cld3
-  (paw-click-overlay-enable t)
-  (paw-annotation-read-only-enable t)
-  (paw-annotation-show-wordlists-words-p t) ;; setup ECDICT before using it
-  (paw-annotation-show-unknown-words-p nil) ;; setup ECDICT before using it
-  (paw-ecdict-frq 3000) ;; all possible words, 0 no frq data
-  (paw-ecdict-bnc -1) ;; all possible words, 0 no bnc data
-  (paw-ecdict-tags "cet4 cet6 ielts toefl gre empty") ;; no easy words
-  (paw-ecdict-oxford 0) ;; no easy words
-  (paw-ecdict-collins-max-level 3) ;; no easy words
-  ;; (paw-posframe-p (if (string-equal system-type "android") t))
-  ;; For online words, you have to apply api on
-  ;; https://my.eudic.net/OpenAPI/Authorization
-  (paw-authorization-keys (auth-source-pick-first-password :host "eudic-api-key"))
-  ;; limit the other languages web buttons number
-  (paw-english-web-button-number (if (eq system-type 'android) 4 4))
-  ;; limit the japanese web buttons number
-  (paw-japanese-web-button-number (if (eq system-type 'android) 3 4))
-  ;; limit the general web buttons number
-  (paw-general-web-button-number (if (eq system-type 'android) 2 3))
-  ;; (paw-default-say-word-function (if (eq system-type 'android) 'paw-android-say-word 'paw-say-word))
-  (paw-tts-zh-cn-voice "zh-CN-YunjianNeural") ; zh-CN-XiaoxiaoNeural, zh-CN-YunyangNeural
-  ;; (paw-sdcv-dictionary-list '("简明英汉字典增强版"))
-  ;; add online word by default for add button
-  (paw-add-button-online-p t)
-  ;; show the note both in minibuffer or/and *paw-view-note*
-  ;; To use this, you need to setup ECDICT (English) or JLPT (Japanese) before
-  ;; use this, otherwise, use the 'buffer instead
-  (paw-view-note-show-type (if (eq system-type 'android) 'buffer 'all))
-  ;; must be one of the studylist name in `paw-studylist', please run `paw-get-all-studylist' to get the available studylists.
-  (paw-default-online-studylist "ID: 133584289117482484, Language: en, Name: Business")
-  ;; (paw-default-online-studylist "ID: 133616431737936696, Language: en, Name: 00 Japanese Mini Stories")
-  (paw-offline-studylist '(("English Studylist" ;; studylist name when choosing offline studylist
-                            (id . "1") ;; random id for internal use, but it could not be the same as any id in online study list defined in `paw-studylist'
-                            (language . "en") ;; language of the studylist
-                            (name . "English")) ;; name of the studylist
-                           ("Japanese Studylist"
-                            (id . "2")
-                            (language . "ja")
-                            (name . "Japanese"))))
-  ;; must be one of the studylist name in `paw-offline-studylist'
-  (paw-default-offline-studylist "English Studylist")
-  (paw-search-page-max-rows (if (eq system-type 'android) 31 41))
-  (paw-add-offline-word-without-asking t)
-  (paw-add-online-word-without-asking t)
-  :config
-  (setq paw-note-dir (expand-file-name "Dict_Notes" org-directory))
-  ;; if the file was moved to other places after adding annotations, we can add
-  ;; the parent path of the file for paw to search. This is necessary for
-  ;; multiple clients (PC/Mobile/Pad) to use the same database but file location
-  ;; is different.
-  (setq paw-annotation-search-paths '("~/Data/Books/"
-                                       "/storage/emulated/0/Books/"
-                                       "/storage/emulated/0/Download/"
-                                       "/storage/emulated/0/Download/Telegram/"
-                                       "/storage/emulated/0/org/web/"
-                                       "~/org/web/"
-                                       "~/org/web/"
-                                       ))
-
-  ;; show image annotation in *paw-view-note*
-  (add-hook 'paw-view-note-after-render-hook #'org-display-inline-images)
-  (add-hook 'context-menu-functions #'paw-annotation-context-menu)
-
-  (unless (string-equal system-type "android")
-      (setq paw-dictionary-browse-function 'eaf-browse)
-      (setq paw-mdict-dictionary-function 'eaf-browse))
-
-  ;; my personal configs
-  (add-hook 'paw-view-note-mode-hook #'paw-view-note-setup)
-  (add-hook 'paw-annotation-mode-hook #'paw-annotation-setup)
-  )
-
-(defun paw-view-note-setup ()
-  (org-writeroom-setup)
-  (org-modern-mode)
-  (pangu-spacing-mode))
-
-(defun paw-annotation-setup()
-  ;; TODO need manual enable later
-  (flyspell-mode -1))
-#+end_src
 * Demos
 
 https://emacs-china.org/uploads/default/original/3X/2/b/2bc2d9fd996827097b13f751c327ad7141376f88.gif
@@ -380,7 +458,7 @@ https://emacs-china.org/t/paw-el-emacs-lingq/27331
 
 https://t.me/emacs_paw
 
-* Thanks the following great tools
+* References
 1. LingQ: Learning a language by reading
 2. Kindle Vocabulary Builder
 3. org noter
@@ -391,3 +469,8 @@ https://t.me/emacs_paw
 8. 蒙哥阅读器
 9. Anki
 10. [[https://github.com/themoeway/yomitan][Yomitan]]
+11. [[https://github.com/killergerbah/asbplayer/tree/main?tab=readme-ov-file][asbplayer]]
+12. [[https://github.com/kha-white/mokuro][mokuro]]
+13. [[https://github.com/ninja33/ODH][ODH]]
+14. [[https://chromewebstore.google.com/detail/lulu-translate/djbfechcnkppbknmlhfcaoifgnicolin][LuLu Translate]]
+15. [[https://chromewebstore.google.com/detail/immersive-translate-trans/bpoadfkcbjbfhfodiogcnhhhpibjhbnh][Immersive Translate]]
